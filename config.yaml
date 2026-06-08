@@ -1,0 +1,17 @@
+app:
+  db_path: tasktracker.db
+  host: 127.0.0.1
+  port: 5000
+
+ai:
+  engine: gemini                 # gemini | local
+  model: gemini-2.5-flash-lite
+  endpoint: https://generativelanguage.googleapis.com/v1beta
+  temperature: 0.2
+  max_output_tokens: 4096
+  timeout_seconds: 60
+  max_input_chars: 20000         # documents longer than this are truncated
+  keys_path: keys.txt
+
+tracking:
+  due_soon_days: 3
