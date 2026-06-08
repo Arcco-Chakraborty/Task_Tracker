@@ -7,27 +7,53 @@ from datetime import date
 from schedule import parse_date
 
 PROMPT_TEMPLATE = """\
-You are a project planner. Read the document below and preserve all specific \
-project details while turning the work into a tracker.
+You are an expert project planner. Turn the document into a precise, trackable \
+plan. Getting the SEQUENCE and TIMING right matters most.
 
-Rules:
-- Use a real date for "deadline" (format YYYY-MM-DD) ONLY if the document \
-states or clearly implies one.
-- Otherwise estimate "duration_days" (an integer) for a recommended timeline, \
-and set "deadline" to null. Do not invent calendar dates.
-- If you know neither, set both to null.
-- Set "weight" to an integer 1-5 for how much EFFORT/TIME each item takes: \
-1 = a few minutes / trivial (e.g. "set up environment", "create a repo"), \
-2 = up to an hour, 3 = a few hours, 4 = roughly a full day, \
-5 = multiple days / major undertaking (e.g. "study a 4-hour lecture series", \
-"build the whole API"). Use the FULL range and DIFFERENTIATE items by real \
-effort - do NOT mark everything high; most checklists have a mix.
-- Put recurring/background/everyday work in "everyday_items", not in phases.
-- Preserve names, constraints, decisions, deliverables, tools, links, files, \
-contacts, references, and other specifics in "info_cards" and "resources".
-- Attach resources to the closest checklist item when possible; otherwise put \
-them in the top-level "resources" list.
-- Keep titles short; put detail in "description".
+SEQUENCE & TIMING (most important):
+- Order phases, and items within them, by WHEN they should be done \
+(chronologically / by dependency) - NOT by where they appear in the document. \
+A section that appears at the END of the document but says to do something \
+"in week 1", "first", "to begin", or "immediately" MUST be placed at the \
+START of the plan.
+- "Week N", "Day N", "by <date>", "before X", "after X", "kickoff", "ASAP", \
+"immediately", "first" describe WHEN a task happens, NOT how long it takes. \
+Never turn "do this in week 1" into a task that lasts one week. Set \
+"duration_days" from the ACTUAL effort and use ordering/deadline for timing.
+- If a task must happen within week N and the start date is known, set \
+"deadline" to a date inside that week; otherwise place it in an early phase \
+with a realistic small "duration_days".
+- Dependencies go EARLY even if listed late or never called urgent: \
+prerequisites, environment/setup, installs, accounts, registrations, \
+approvals, ordering/buying materials - anything that BLOCKS later work.
+
+EXPAND LISTS:
+- Every distinct action becomes its OWN checklist item. NEVER merge a list, \
+multiple bullets, or several sentences into one item. A "list of time-sensitive \
+actions" must become one item per action.
+
+TIME-SENSITIVE (set "time_sensitive": true or false on every item):
+- true when an item has a hard/near deadline or is inherently urgent: \
+registrations, submissions, applications, bookings, payments, RSVPs, \
+approvals, anything marked urgent/ASAP/"first"/"week 1", AND any prerequisite \
+that blocks other work - even if the document does not literally say "urgent".
+- Also infer it: a step others depend on, or something with an external \
+deadline, is time-sensitive. Otherwise false.
+- Place every time-sensitive item as early as its timing requires.
+
+OTHER FIELDS:
+- "weight" 1-5 = EFFORT/TIME: 1 = minutes/trivial (e.g. "create a repo"), \
+2 = under an hour, 3 = a few hours, 4 = ~a full day, 5 = multiple days / major \
+(e.g. "study a 4-hour lecture"). Use the FULL range; differentiate.
+- Put recurring/background/ongoing work in "everyday_items" with a "cadence" \
+(e.g. "daily", "weekly"), NOT in phases.
+- Preserve specifics (names, numbers, constraints, decisions, deliverables, \
+tools, files, contacts, references) in "info_cards" and "resources". Attach a \
+resource to its closest item when possible, else the top-level "resources".
+- "deadline" is a real date (YYYY-MM-DD) only when stated or clearly implied \
+(directly, or via "week N"/"by <date>" relative to the start). Never invent \
+dates; use "duration_days" otherwise. Keep titles short; detail in \
+"description".
 {anchor}
 Respond with raw JSON only (no markdown, no code fences) in EXACTLY this shape:
 {{
@@ -42,7 +68,7 @@ Respond with raw JSON only (no markdown, no code fences) in EXACTLY this shape:
     {{"name": "string", "items": [
       {{"title": "string", "description": "string",
         "deadline": "YYYY-MM-DD or null", "duration_days": integer or null,
-        "weight": integer 1-5,
+        "weight": integer 1-5, "time_sensitive": true or false,
         "resources": [
           {{"title": "string", "url": "string or null", "note": "string"}}
         ]}}
@@ -169,8 +195,12 @@ def normalize_extraction(raw: dict) -> dict:
                 "deadline": _norm_date(item.get("deadline")),
                 "duration_days": _coerce_int(item.get("duration_days")),
                 "weight": _coerce_weight(item.get("weight")),
+                "time_sensitive": bool(item.get("time_sensitive")),
                 "resources": resources,
             })
+        # Safeguard: keep time-sensitive actions at the front of their phase
+        # (stable, so the model's order is otherwise preserved).
+        items_out.sort(key=lambda i: 0 if i["time_sensitive"] else 1)
         phases_out.append({
             "name": (phase.get("name") or "Phase").strip(),
             "items": items_out,

@@ -110,6 +110,7 @@
             <p class="font-medium {% if item.status == 'done' %}line-through text-slate-400{% endif %}">{{ item.title }}</p>
             {% if item.description %}<p class="text-sm text-slate-500 whitespace-pre-wrap">{{ item.description }}</p>{% endif %}
           </div>
+          {% if item.time_sensitive %}<span class="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700" title="Time-sensitive">&#9200; time-sensitive</span>{% endif %}
           <span class="shrink-0 font-mono text-[11px] leading-none text-amber-500" title="effort {{ item.weight }}/5">{{ '●' * item.weight }}{{ '○' * (5 - item.weight) }}</span>
           <span class="shrink-0 text-xs px-2 py-1 rounded {{ badge[item.urgency] }}">
             {% if item.resolved_date %}{{ item.resolved_date }}{% elif item.duration_days %}~{{ item.duration_days }}d{% else %}-{% endif %}

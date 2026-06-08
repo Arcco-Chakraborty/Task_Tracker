@@ -169,3 +169,26 @@ def test_everyday_per_day_completions():
     assert (eid, "2026-06-07") not in comp
     # since_day filter excludes older days
     assert db.list_everyday_completions(conn, pid, "2026-06-08") == {(eid, "2026-06-08")}
+
+
+def test_time_sensitive_persists_and_migrates(tmp_path):
+    conn = _conn()
+    pid = db.create_project(conn, "A", "", "text", "x")
+    ph = db.create_phase(conn, pid, "P", 0)
+    db.create_item(conn, ph, "reg", "", time_sensitive=True, position=0)
+    db.create_item(conn, ph, "plain", "", position=1)
+    rows = db.list_items(conn, ph)
+    assert rows[0]["time_sensitive"] == 1
+    assert rows[1]["time_sensitive"] == 0
+    # migration adds the column to an older DB
+    import sqlite3
+    p = str(tmp_path / "old.db")
+    raw = sqlite3.connect(p)
+    raw.executescript(
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, phase_id INTEGER, title TEXT,"
+        " description TEXT, status TEXT, deadline TEXT, duration_days INTEGER,"
+        " position INTEGER, created_at TEXT, updated_at TEXT);")
+    raw.commit(); raw.close()
+    c2 = db.connect(p); db.init_db(c2)
+    cols = [r["name"] for r in c2.execute("PRAGMA table_info(items)").fetchall()]
+    assert "time_sensitive" in cols and "weight" in cols

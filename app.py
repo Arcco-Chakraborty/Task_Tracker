@@ -329,7 +329,9 @@ def create_app(cfg=None) -> Flask:
         items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"])
         order = {"overdue": 0, "due-soon": 1, "upcoming": 2, "none": 3,
                  "done": 4}
+        # Within an urgency bucket, time-sensitive items come first.
         items.sort(key=lambda i: (order[i["urgency"]],
+                                  0 if i.get("time_sensitive") else 1,
                                   i["resolved_date"] or date.max))
         return render_template("dashboard.html", items=items)
 

@@ -100,3 +100,21 @@ def test_normalize_clamps_weight():
     ]}]}
     items = extract.normalize_extraction(raw)["phases"][0]["items"]
     assert [i["weight"] for i in items] == [5, 1, 3, 4]
+
+
+def test_normalize_captures_time_sensitive_and_floats_it_first():
+    raw = {"phases": [{"name": "P", "items": [
+        {"title": "normal task"},
+        {"title": "register now", "time_sensitive": True},
+        {"title": "also normal"},
+    ]}]}
+    items = extract.normalize_extraction(raw)["phases"][0]["items"]
+    # time-sensitive item floated to the front of the phase
+    assert items[0]["title"] == "register now"
+    assert items[0]["time_sensitive"] is True
+    assert items[1]["time_sensitive"] is False
+
+
+def test_normalize_time_sensitive_defaults_false():
+    raw = {"phases": [{"name": "P", "items": [{"title": "x"}]}]}
+    assert extract.normalize_extraction(raw)["phases"][0]["items"][0]["time_sensitive"] is False
