@@ -32,19 +32,22 @@ def parse_json_object(text: str) -> dict:
     return obj
 
 
-def load_keys(path: str = "keys.txt") -> list[str]:
-    """Read API keys from keys.txt. One key per line; '#' lines and blanks
-    ignored; a comma-separated line is split too."""
-    if not os.path.exists(path):
-        return []
-    keys: list[str] = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            keys.extend(k.strip() for k in line.split(",") if k.strip())
-    return keys
+def load_keys(env_path: str = ".env", var: str = "GEMINI_API_KEYS") -> list[str]:
+    """Read API keys from the GEMINI_API_KEYS entry of a .env file (comma-
+    separated). The .env is loaded into os.environ first WITHOUT overriding
+    already-set vars (so a real environment variable wins), then the variable
+    is comma-split. Returns [] if unset."""
+    if os.path.exists(env_path):
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    return [k.strip() for k in os.environ.get(var, "").split(",") if k.strip()]
 
 
 class GeminiBackend:
@@ -61,7 +64,7 @@ class GeminiBackend:
         self.temperature = float(s.get("temperature", 0.2))
         self.max_output_tokens = int(s.get("max_output_tokens", 4096))
         self.timeout = int(s.get("timeout_seconds", 60))
-        self.keys = load_keys(s.get("keys_path", "keys.txt"))
+        self.keys = load_keys(s.get("env_path", ".env"))
         self._i = 0
 
     def _next_key(self) -> str:
@@ -71,7 +74,7 @@ class GeminiBackend:
 
     def complete(self, prompt: str) -> dict:
         if not self.keys:
-            raise LLMError("no keys configured (keys.txt empty or missing)")
+            raise LLMError("no keys configured (GEMINI_API_KEYS missing in .env)")
         last = "all keys exhausted"
         for _ in range(len(self.keys)):
             key = self._next_key()

@@ -11,7 +11,7 @@ ai:
   max_output_tokens: 4096
   timeout_seconds: 60
   max_input_chars: 20000         # documents longer than this are truncated
-  keys_path: keys.txt
+  env_path: .env                 # GEMINI_API_KEYS=key1,key2,... lives here
 
 tracking:
   due_soon_days: 3
