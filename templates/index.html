@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="text-2xl font-bold mb-4">Projects</h1>
+{% if not projects %}
+  <p class="text-slate-500">No projects yet. <a class="text-blue-600 underline" href="/upload">Create one</a>.</p>
+{% endif %}
+<ul class="space-y-3">
+  {% for p in projects %}
+  <li class="bg-white rounded-lg shadow p-4">
+    <a class="text-lg font-semibold text-blue-700 hover:underline" href="/project/{{ p.id }}">{{ p.title }}</a>
+    <p class="text-sm text-slate-500">{{ p.summary }}</p>
+    <div class="mt-2 h-2 bg-slate-200 rounded">
+      <div class="h-2 bg-green-500 rounded" style="width: {{ p.progress.percent }}%"></div>
+    </div>
+    <p class="text-xs text-slate-500 mt-1">{{ p.progress.done }}/{{ p.progress.total }} done ({{ p.progress.percent }}%)</p>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

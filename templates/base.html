@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Task Tracker{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <nav class="bg-slate-900 text-white px-6 py-3 flex gap-6 items-center">
+    <a href="/" class="font-semibold">Task Tracker</a>
+    <a href="/upload" class="hover:underline">New</a>
+    <a href="/dashboard" class="hover:underline">Dashboard</a>
+    <a href="/calendar" class="hover:underline">Calendar</a>
+    <a href="/export.ics" class="hover:underline ml-auto text-sm">Export .ics</a>
+  </nav>
+  <main class="max-w-4xl mx-auto p-6">
+    {% block body %}{% endblock %}
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
