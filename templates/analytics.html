@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import ring, bar with context %}
+{% block title %}Analytics{% endblock %}
+{% block body %}
+<h1 class="text-2xl md:text-3xl font-semibold tracking-tight reveal">Analytics</h1>
+<p class="muted mt-1 reveal" style="animation-delay:.04s">Live metrics computed from your tasks.</p>
+
+<section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+  <div class="card p-5 flex items-center gap-4 reveal" style="animation-delay:.06s">
+    <div class="relative grid place-items-center">{{ ring(analytics.completion, 64, 7) }}<span class="absolute font-mono text-[11px]">{{ analytics.completion }}</span></div>
+    <div><p class="text-[11px] uppercase tracking-wider faint">Completion</p><p class="font-mono text-2xl font-semibold">{{ analytics.completion }}%</p></div>
+  </div>
+  <div class="card p-5 reveal" style="animation-delay:.10s"><p class="text-[11px] uppercase tracking-wider faint">Tasks</p><p class="font-mono text-3xl font-semibold mt-1">{{ analytics.total }}</p><p class="text-xs muted">{{ analytics.done }} done</p></div>
+  <div class="card p-5 reveal" style="animation-delay:.14s"><p class="text-[11px] uppercase tracking-wider faint">Projects</p><p class="font-mono text-3xl font-semibold mt-1">{{ analytics.active_projects }}</p></div>
+  <div class="card p-5 reveal" style="animation-delay:.18s"><p class="text-[11px] uppercase tracking-wider faint">Overdue</p><p class="font-mono text-3xl font-semibold mt-1" style="color:{{ '#fb7185' if analytics.by_urgency.overdue else 'inherit' }}">{{ analytics.by_urgency.overdue }}</p></div>
+</section>
+
+<div class="grid lg:grid-cols-2 gap-6 mt-6">
+  <!-- everyday trend (last 14 days) -->
+  <section class="card p-6 reveal" style="animation-delay:.10s">
+    <h2 class="font-semibold">Everyday completions · 14 days</h2>
+    <div class="mt-6 flex items-end gap-2 h-40">
+      {% for t in analytics.trend %}
+      <div class="flex-1 flex flex-col items-center gap-2 group">
+        <div class="w-full rounded-t-md transition-all" title="{{ t.date }}: {{ t.done }}"
+             style="height: {{ (t.done / analytics.trend_max * 100) }}%; min-height:4px; background:linear-gradient(180deg,var(--accent),var(--accent-2))"></div>
+        <span class="text-[10px] faint">{{ t.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- effort distribution -->
+  <section class="card p-6 reveal" style="animation-delay:.14s">
+    <h2 class="font-semibold">Effort distribution</h2>
+    <div class="mt-5 space-y-3">
+      {% for w in [5,4,3,2,1] %}
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-xs w-6 faint">{{ w }}★</span>
+        <div class="flex-1">{{ bar((analytics.weight_dist[w] / analytics.weight_max * 100) if analytics.weight_max else 0) }}</div>
+        <span class="font-mono text-xs w-6 text-right">{{ analytics.weight_dist[w] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- urgency breakdown -->
+  <section class="card p-6 reveal lg:col-span-2" style="animation-delay:.18s">
+    <h2 class="font-semibold mb-4">Workload by urgency</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {% set labels = {'overdue':'Overdue','due-soon':'Due soon','upcoming':'Upcoming','none':'Unscheduled','done':'Done'} %}
+      {% for key, label in labels.items() %}
+      <div class="card-flush p-4 text-center">
+        <div class="u-dot u-{{ key }} mx-auto mb-2"></div>
+        <p class="font-mono text-2xl font-semibold">{{ analytics.by_urgency[key] }}</p>
+        <p class="text-[11px] faint mt-0.5">{{ label }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -6,3 +6,7 @@ venv/
 keys.txt
 .env
 .pytest_cache/
+
+# transient
+*.log
+_shot_*.png

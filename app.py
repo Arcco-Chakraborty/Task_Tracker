@@ -1,7 +1,7 @@
 """app.py — Flask app for the task tracker."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import (Flask, abort, g, has_app_context, jsonify, redirect,
                    render_template, request, url_for, Response)
@@ -130,6 +130,17 @@ def _all_dated_items(conn, due_soon_days, today=None):
     return out
 
 
+def _streak(days: set, today) -> int:
+    """Consecutive days (ending today, or yesterday if today isn't done yet)
+    that have at least one everyday completion."""
+    cursor = today if today.isoformat() in days else today - timedelta(days=1)
+    count = 0
+    while cursor.isoformat() in days:
+        count += 1
+        cursor -= timedelta(days=1)
+    return count
+
+
 def create_app(cfg=None) -> Flask:
     cfg = cfg or load_config()
     flask_app = Flask(__name__)
@@ -153,16 +164,132 @@ def create_app(cfg=None) -> Flask:
         if conn is not None:
             conn.close()
 
-    @flask_app.route("/")
-    def index():
+    @flask_app.context_processor
+    def _inject_globals():
+        """`now` and `stats` (streak + week's completions) for the chrome."""
         conn = get_conn(flask_app)
+        today = date.today()
+        days = db.all_completion_days(conn)
+        week_ago = (today - timedelta(days=7)).isoformat()
+        week_done = (db.count_done_items_since(conn, week_ago)
+                     + sum(1 for d in days if d >= week_ago))
+        return {"now": datetime.now(),
+                "stats": {"streak": _streak(days, today), "week_done": week_done}}
+
+    def _projects_with_progress(conn):
         projects = []
         for p in db.list_projects(conn):
             items = []
             for ph in db.list_phases(conn, p["id"]):
                 items.extend(db.list_items(conn, ph["id"]))
-            projects.append({**p, "progress": schedule.progress(items)})
-        return render_template("index.html", projects=projects)
+            projects.append({**p, "progress": schedule.progress(items),
+                             "item_count": len(items)})
+        return projects
+
+    @flask_app.route("/")
+    def index():
+        conn = get_conn(flask_app)
+        today = date.today()
+        due_soon = flask_app.config["DUE_SOON_DAYS"]
+        projects = _projects_with_progress(conn)
+        items = _all_dated_items(conn, due_soon, today)
+        done = sum(1 for i in items if i["status"] == "done")
+        total = len(items)
+        overdue = [i for i in items if i["urgency"] == "overdue"]
+        upcoming = sorted(
+            (i for i in items if i["status"] != "done" and i["resolved_date"]
+             and i["resolved_date"] >= today),
+            key=lambda i: i["resolved_date"])[:5]
+        ev_total = db.count_everyday_items(conn)
+        ev_done = db.count_everyday_done_on(conn, today.isoformat())
+        overall = round(done / total * 100) if total else 0
+        focus = max(0, min(100, overall - len(overdue) * 8))
+        hero = {
+            "overall": overall, "done": done, "total": total,
+            "overdue": len(overdue), "focus": focus,
+            "everyday_done": ev_done, "everyday_total": ev_total,
+            "everyday_pct": round(ev_done / ev_total * 100) if ev_total else 0,
+        }
+        return render_template("index.html", active="dashboard",
+                               projects=projects, hero=hero, upcoming=upcoming)
+
+    @flask_app.route("/projects")
+    def projects_page():
+        conn = get_conn(flask_app)
+        return render_template("projects.html", active="projects",
+                               projects=_projects_with_progress(conn))
+
+    @flask_app.route("/today")
+    def today_page():
+        conn = get_conn(flask_app)
+        today = date.today()
+        due_soon = flask_app.config["DUE_SOON_DAYS"]
+        items = _all_dated_items(conn, due_soon, today)
+        focus = sorted(
+            (i for i in items if i["status"] != "done"
+             and i["urgency"] in ("overdue", "due-soon")),
+            key=lambda i: (i["urgency"] != "overdue", i["resolved_date"] or date.max))
+        # everyday items across all projects, with today's done state
+        everyday = []
+        for p in db.list_projects(conn):
+            rows, _ = _everyday_view(conn, p["id"], today)
+            for r in rows:
+                everyday.append({**r, "project_title": p["title"],
+                                 "project_id": p["id"]})
+        return render_template("today.html", active="today",
+                               focus=focus, everyday=everyday)
+
+    @flask_app.route("/planner")
+    def planner_page():
+        conn = get_conn(flask_app)
+        today = date.today()
+        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"], today)
+        groups = {}  # date-iso -> list (None bucket for unscheduled)
+        for i in items:
+            key = i["resolved_date"].isoformat() if i["resolved_date"] else None
+            groups.setdefault(key, []).append(i)
+        dated = sorted((k, v) for k, v in groups.items() if k is not None)
+        undated = groups.get(None, [])
+        return render_template("planner.html", active="planner",
+                               dated=dated, undated=undated)
+
+    @flask_app.route("/analytics")
+    def analytics_page():
+        conn = get_conn(flask_app)
+        today = date.today()
+        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"], today)
+        total = len(items)
+        done = sum(1 for i in items if i["status"] == "done")
+        by_urgency = {k: 0 for k in ("overdue", "due-soon", "upcoming", "none", "done")}
+        for i in items:
+            by_urgency[i["urgency"]] += 1
+        weight_dist = {w: 0 for w in range(1, 6)}
+        for i in items:
+            weight_dist[min(5, max(1, i.get("weight") or 3))] += 1
+        # completions over the last 14 days
+        comp_days = db.all_completion_days(conn)
+        trend = []
+        for n in range(13, -1, -1):
+            d = today - timedelta(days=n)
+            trend.append({"label": d.strftime("%a")[0], "date": d.isoformat(),
+                          "done": db.count_everyday_done_on(conn, d.isoformat())})
+        max_trend = max((t["done"] for t in trend), default=0) or 1
+        projects = _projects_with_progress(conn)
+        analytics = {
+            "total": total, "done": done,
+            "completion": round(done / total * 100) if total else 0,
+            "by_urgency": by_urgency, "weight_dist": weight_dist,
+            "weight_max": max(weight_dist.values()) or 1,
+            "trend": trend, "trend_max": max_trend,
+            "active_projects": len(projects),
+        }
+        return render_template("analytics.html", active="analytics",
+                               analytics=analytics, projects=projects)
+
+    @flask_app.route("/settings")
+    def settings_page():
+        return render_template("settings.html", active="settings",
+                               cfg=flask_app.config["CFG"])
 
     @flask_app.route("/project/<int:project_id>")
     def project(project_id):
@@ -171,7 +298,7 @@ def create_app(cfg=None) -> Flask:
         if p is None:
             abort(404)
         ctx = _project_view(conn, p, flask_app.config["DUE_SOON_DAYS"])
-        return render_template("project.html", **ctx)
+        return render_template("project.html", active="projects", **ctx)
 
     @flask_app.route("/upload", methods=["GET", "POST"])
     def upload():
@@ -333,7 +460,7 @@ def create_app(cfg=None) -> Flask:
         items.sort(key=lambda i: (order[i["urgency"]],
                                   0 if i.get("time_sensitive") else 1,
                                   i["resolved_date"] or date.max))
-        return render_template("dashboard.html", items=items)
+        return render_template("dashboard.html", active="today", items=items)
 
     @flask_app.route("/calendar")
     def calendar():
@@ -343,7 +470,7 @@ def create_app(cfg=None) -> Flask:
         by_date = {}
         for i in items:
             by_date.setdefault(i["resolved_date"].isoformat(), []).append(i)
-        return render_template("calendar.html",
+        return render_template("calendar.html", active="calendar",
                                by_date=sorted(by_date.items()))
 
     def _ics_response(items):

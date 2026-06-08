@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import task_card with context %}
+{% block title %}Today{% endblock %}
+{% block body %}
+<h1 class="text-2xl md:text-3xl font-semibold tracking-tight reveal">Today</h1>
+<p class="muted mt-1 reveal" style="animation-delay:.04s">{{ now.strftime('%A, %B %d') }} — your focus for the day.</p>
+
+<div class="grid xl:grid-cols-2 gap-6 mt-6">
+  <section class="reveal" style="animation-delay:.08s">
+    <h2 class="text-lg font-semibold mb-3">Needs attention</h2>
+    {% if not focus %}<div class="card p-8 text-center muted">Nothing overdue or due soon. 🎉</div>{% endif %}
+    <ul class="space-y-2.5">
+      {% for it in focus %}{{ task_card(it, show_project=true) }}{% endfor %}
+    </ul>
+  </section>
+
+  <section class="reveal" style="animation-delay:.12s">
+    <h2 class="text-lg font-semibold mb-3">Everyday &amp; ongoing</h2>
+    {% if not everyday %}<div class="card p-8 text-center muted">No everyday tasks yet.</div>{% endif %}
+    <ul class="space-y-2.5">
+      {% for item in everyday %}
+      <li class="card p-4" data-card data-everyday-id="{{ item.id }}">
+        <div class="flex items-center gap-3">
+          {% set todaycell = item.days[-1] %}
+          <input type="checkbox" class="checkbox js-everyday-day" data-everyday-id="{{ item.id }}" data-day="{{ todaycell.date }}" {% if todaycell.done %}checked{% endif %}>
+          <div class="min-w-0 flex-1">
+            <p class="font-medium {% if todaycell.done %}line-through faint{% endif %}">{{ item.title }}</p>
+            <a href="/project/{{ item.project_id }}" class="text-xs link">{{ item.project_title }}</a>
+          </div>
+          {% if item.cadence %}<span class="pill pill-accent">{{ item.cadence }}</span>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

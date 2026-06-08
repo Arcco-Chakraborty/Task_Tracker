@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import task_card with context %}
+{% block title %}Planner{% endblock %}
+{% block body %}
+<h1 class="text-2xl md:text-3xl font-semibold tracking-tight reveal">Planner</h1>
+<p class="muted mt-1 reveal" style="animation-delay:.04s">A timeline of every task, scheduled by resolved date.</p>
+
+<div class="mt-6 space-y-6">
+  {% for day, items in dated %}
+  <section class="reveal" data-card>
+    <div class="flex items-center gap-3 mb-2">
+      <h2 class="font-mono text-sm font-semibold">{{ day }}</h2>
+      <span class="flex-1 border-t hairline"></span>
+      <span class="pill">{{ items|length }}</span>
+    </div>
+    <ul class="space-y-2.5">{% for it in items %}{{ task_card(it, show_project=true) }}{% endfor %}</ul>
+  </section>
+  {% endfor %}
+
+  {% if undated %}
+  <section class="reveal" data-card>
+    <div class="flex items-center gap-3 mb-2">
+      <h2 class="text-sm font-semibold faint">Unscheduled</h2>
+      <span class="flex-1 border-t hairline"></span>
+      <span class="pill">{{ undated|length }}</span>
+    </div>
+    <ul class="space-y-2.5">{% for it in undated %}{{ task_card(it, show_project=true) }}{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if not dated and not undated %}
+  <div class="card p-8 text-center muted">No tasks yet. <a class="link" href="/upload">Create a plan</a>.</div>
+  {% endif %}
+</div>
+{% endblock %}

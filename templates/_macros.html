@@ -1,0 +1,61 @@
+{# Reusable premium UI components. #}
+
+{% macro ring(pct, size=78, stroke=8) %}
+{% set r = (size - stroke) / 2.0 %}
+{% set c = 6.2831853 * r %}
+<svg class="ring" width="{{ size }}" height="{{ size }}" viewBox="0 0 {{ size }} {{ size }}">
+  <circle class="ring-track" cx="{{ size/2 }}" cy="{{ size/2 }}" r="{{ r }}" fill="none" stroke-width="{{ stroke }}"/>
+  <circle class="ring-bar" cx="{{ size/2 }}" cy="{{ size/2 }}" r="{{ r }}" fill="none" stroke-width="{{ stroke }}"
+    stroke-dasharray="{{ c }}" stroke-dashoffset="{{ c * (1 - pct/100.0) }}"/>
+</svg>
+{% endmacro %}
+
+{% macro effort(weight) %}
+<span class="effort font-mono" style="color:var(--accent)" title="effort {{ weight }}/5">{{ '●' * weight }}<span class="faint">{{ '○' * (5 - weight) }}</span></span>
+{% endmacro %}
+
+{% macro bar(pct, color='') %}
+<div class="bar"><span style="width: {{ pct }}%{% if color %};background:{{ color }}{% endif %}"></span></div>
+{% endmacro %}
+
+{# A task card/row used across project, today, planner and dashboard views.
+   `it` is an item dict; pass proj_title for the Google Calendar summary and
+   show_project to render the project tag. #}
+{% macro task_card(it, proj_title='', show_project=false) %}
+{% set ptitle = (it.project_title if it.project_title else proj_title) %}
+<li class="card p-4" data-card data-item-id="{{ it.id }}" data-status="{{ it.status }}">
+  <div class="flex items-start gap-3">
+    <input type="checkbox" class="checkbox js-status mt-0.5" {% if it.status == 'done' %}checked{% endif %}>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2 flex-wrap">
+        <p class="font-medium {% if it.status == 'done' %}line-through faint{% endif %}">{{ it.title }}</p>
+        {% if it.time_sensitive %}<span class="pill pill-bad">&#9200; time-sensitive</span>{% endif %}
+        {% if show_project and ptitle %}<a href="/project/{{ it.project_id }}" class="pill pill-accent">{{ ptitle }}</a>{% endif %}
+      </div>
+      {% if it.description %}<p class="mt-1 text-sm muted whitespace-pre-wrap">{{ it.description }}</p>{% endif %}
+      <div class="mt-2.5 flex items-center gap-3 flex-wrap text-xs">
+        <span class="flex items-center gap-1.5 muted">
+          <span class="u-dot u-{{ it.urgency }}"></span>
+          {% if it.resolved_date %}<span class="font-mono">{{ it.resolved_date }}</span>{% elif it.duration_days %}~{{ it.duration_days }}d{% else %}<span class="faint">unscheduled</span>{% endif %}
+        </span>
+        {{ effort(it.weight or 3) }}
+        {% if it.resolved_date %}
+        <a class="link" target="_blank" rel="noopener noreferrer"
+           href="{{ gcal_link(ptitle ~ ': ' ~ it.title if ptitle else it.title, it.resolved_date, it.description) }}">+ Google Calendar</a>
+        {% endif %}
+      </div>
+      {% if it.resources %}
+      <div class="mt-2.5 flex flex-wrap gap-2">
+        {% for r in it.resources %}
+          {% if r.url %}<a class="pill pill-accent" href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+          {% else %}<span class="pill">{{ r.title }}</span>{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <button class="js-delete icon-btn shrink-0" style="width:30px;height:30px" title="Delete">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+</li>
+{% endmacro %}

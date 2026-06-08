@@ -1,22 +1,143 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Task Tracker{% endblock %}</title>
+  <title>{% block title %}Task Tracker{% endblock %} · Planner</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: "class",
+      theme: { extend: {
+        colors: { accent: "#8b7bff", accentdeep: "#2d0086" },
+        fontFamily: { sans: ["Geist", "ui-sans-serif", "system-ui"], mono: ["Geist Mono", "ui-monospace"] },
+        borderRadius: { xl: "16px", "2xl": "20px" },
+      } } };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="/static/style.css" rel="stylesheet">
 </head>
-<body class="bg-slate-50 text-slate-800">
-  <nav class="bg-slate-900 text-white px-6 py-3 flex gap-6 items-center">
-    <a href="/" class="font-semibold">Task Tracker</a>
-    <a href="/upload" class="hover:underline">New</a>
-    <a href="/dashboard" class="hover:underline">Dashboard</a>
-    <a href="/calendar" class="hover:underline">Calendar</a>
-    <a href="/export.ics" class="hover:underline ml-auto text-sm">Export .ics</a>
-  </nav>
-  <main class="max-w-4xl mx-auto p-6">
-    {% block body %}{% endblock %}
-  </main>
-  <script src="/static/app.js"></script>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="ringgrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#8b7bff"/><stop offset="100%" stop-color="#2d0086"/>
+  </linearGradient>
+</defs></svg>
+{% set active = active|default('') %}
+{% set greet = ('Good morning' if now.hour < 12 else 'Good afternoon' if now.hour < 18 else 'Good evening') %}
+<div class="app" id="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="flex items-center justify-between mb-3">
+      <a href="/" class="flex items-center gap-2.5">
+        <span class="grid h-9 w-9 place-items-center rounded-xl text-white font-bold"
+              style="background:linear-gradient(135deg,var(--accent-2),var(--accent-deep));box-shadow:0 8px 20px -8px var(--accent-2)">◗</span>
+        <span class="nav-label text-[15px] font-semibold tracking-tight">Planner</span>
+      </a>
+      <button class="icon-btn sidebar-only" onclick="toggleSidebar()" title="Collapse" style="width:30px;height:30px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+
+    <!-- profile -->
+    <div class="nav-item" style="cursor:default">
+      <span class="grid h-7 w-7 place-items-center rounded-full text-[12px] font-bold text-white shrink-0"
+            style="background:linear-gradient(135deg,#7c5cff,#2d0086)">A</span>
+      <span class="nav-label">
+        <span class="block text-[13px] font-semibold text-[var(--text)] leading-tight">Arcco</span>
+        <span class="block text-[11px] faint">Pro workspace</span>
+      </span>
+    </div>
+
+    <!-- search -->
+    <div class="relative my-2 sidebar-only">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 faint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input class="input w-full pl-9" data-search placeholder="Search tasks…">
+    </div>
+
+    <!-- nav -->
+    <nav class="flex flex-col gap-1 mt-1">
+      {% set icon = {
+        'dashboard':'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+        'today':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        'planner':'<path d="M4 5h16M4 12h10M4 19h7"/>',
+        'projects':'<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/>',
+        'calendar':'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+        'analytics':'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+        'settings':'<circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1L11 21h4l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5z"/>'
+      } %}
+      {% set nav = [('dashboard','/','Dashboard'),('today','/today','Today'),('planner','/planner','Planner'),('projects','/projects','Projects'),('calendar','/calendar','Calendar'),('analytics','/analytics','Analytics'),('settings','/settings','Settings')] %}
+      {% for key, href, label in nav %}
+      <a href="{{ href }}" class="nav-item {% if active == key %}active{% endif %}" title="{{ label }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{{ icon[key]|safe }}</svg>
+        <span class="nav-label">{{ label }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+
+    <!-- bottom stats -->
+    <div class="mt-auto sidebar-only">
+      <div class="card-flush p-3.5">
+        <p class="text-[11px] uppercase tracking-wider faint">This week</p>
+        <div class="mt-2 flex items-end justify-between">
+          <div>
+            <p class="font-mono text-2xl font-semibold">{{ stats.week_done }}</p>
+            <p class="text-[11px] muted">tasks done</p>
+          </div>
+          <div class="text-right">
+            <p class="font-mono text-2xl font-semibold" style="color:var(--accent)">{{ stats.streak }}🔥</p>
+            <p class="text-[11px] muted">day streak</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="flex flex-col min-w-0">
+    <header class="topbar">
+      <button class="icon-btn" onclick="toggleSidebar()" title="Toggle sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="relative flex-1 max-w-md">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 faint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input class="input w-full pl-9" data-search placeholder="Search tasks, projects…">
+      </div>
+      <div class="ml-auto flex items-center gap-2.5">
+        <span class="pill font-mono hidden sm:inline-flex">{{ now.strftime('%a, %b %d') }}</span>
+        <span class="pill pill-accent" title="Productivity streak">🔥 {{ stats.streak }}d</span>
+        <a class="btn btn-accent" href="/upload">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="hidden sm:inline">New</span>
+        </a>
+        <button class="icon-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </button>
+        <span class="grid h-9 w-9 place-items-center rounded-full text-[12px] font-bold text-white"
+              style="background:linear-gradient(135deg,#7c5cff,#2d0086)">A</span>
+      </div>
+    </header>
+
+    <main class="flex-1 px-6 py-6 md:px-9 md:py-8 max-w-[1400px] w-full mx-auto">
+      {% block body %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<script>
+  function toggleSidebar(){ document.getElementById('app').classList.toggle('collapsed'); }
+  // lightweight client search filter over [data-card] items
+  document.addEventListener('input', (e) => {
+    if (!e.target.matches('[data-search]')) return;
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('[data-card]').forEach(el => {
+      el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+</script>
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

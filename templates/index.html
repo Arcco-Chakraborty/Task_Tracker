@@ -1,19 +1,125 @@
 {% extends "base.html" %}
+{% from "_macros.html" import ring, task_card, bar with context %}
+{% block title %}Dashboard{% endblock %}
 {% block body %}
-<h1 class="text-2xl font-bold mb-4">Projects</h1>
-{% if not projects %}
-  <p class="text-slate-500">No projects yet. <a class="text-blue-600 underline" href="/upload">Create one</a>.</p>
-{% endif %}
-<ul class="space-y-3">
-  {% for p in projects %}
-  <li class="bg-white rounded-lg shadow p-4">
-    <a class="text-lg font-semibold text-blue-700 hover:underline" href="/project/{{ p.id }}">{{ p.title }}</a>
-    <p class="text-sm text-slate-500">{{ p.summary }}</p>
-    <div class="mt-2 h-2 bg-slate-200 rounded">
-      <div class="h-2 bg-green-500 rounded" style="width: {{ p.progress.percent }}%"></div>
+
+<div class="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+  <div class="space-y-6 min-w-0">
+
+    <!-- HERO -->
+    <section class="reveal" style="animation-delay:.02s">
+      <p class="muted text-sm">{{ now.strftime('%A, %B %d') }}</p>
+      <h1 class="text-3xl md:text-4xl font-semibold tracking-tight mt-1">{{ greet }}, <span style="color:var(--accent)">Arcco</span></h1>
+      <p class="muted mt-1">{% if hero.overdue %}You have {{ hero.overdue }} task{{ 's' if hero.overdue != 1 }} overdue — let's clear them.{% elif hero.total %}You're {{ hero.overall }}% through your tracked work. Keep the momentum.{% else %}Nothing tracked yet. Create your first plan to begin.{% endif %}</p>
+    </section>
+
+    <!-- STAT CARDS -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="card p-5 reveal" style="animation-delay:.06s">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-[11px] uppercase tracking-wider faint">Overall</p>
+            <p class="font-mono text-3xl font-semibold mt-1">{{ hero.overall }}%</p>
+            <p class="text-xs muted mt-0.5">{{ hero.done }}/{{ hero.total }} done</p>
+          </div>
+          <div class="relative grid place-items-center">
+            {{ ring(hero.overall, 64, 7) }}
+            <span class="absolute font-mono text-[11px]">{{ hero.overall }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="card p-5 reveal" style="animation-delay:.10s">
+        <p class="text-[11px] uppercase tracking-wider faint">Focus score</p>
+        <p class="font-mono text-3xl font-semibold mt-1" style="color:var(--accent)">{{ hero.focus }}</p>
+        <div class="mt-3">{{ bar(hero.focus) }}</div>
+      </div>
+      <div class="card p-5 reveal" style="animation-delay:.14s">
+        <p class="text-[11px] uppercase tracking-wider faint">Everyday today</p>
+        <p class="font-mono text-3xl font-semibold mt-1">{{ hero.everyday_done }}<span class="faint text-xl">/{{ hero.everyday_total }}</span></p>
+        <div class="mt-3">{{ bar(hero.everyday_pct, 'linear-gradient(90deg,#34d399,#0ea5a4)') }}</div>
+      </div>
+      <div class="card p-5 reveal" style="animation-delay:.18s">
+        <p class="text-[11px] uppercase tracking-wider faint">Overdue</p>
+        <p class="font-mono text-3xl font-semibold mt-1" style="color:{{ '#fb7185' if hero.overdue else 'inherit' }}">{{ hero.overdue }}</p>
+        <p class="text-xs muted mt-0.5">{{ 'needs attention' if hero.overdue else 'all clear ✓' }}</p>
+      </div>
+    </section>
+
+    <!-- UPCOMING -->
+    <section class="reveal" style="animation-delay:.22s">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Upcoming deadlines</h2>
+        <a class="link text-sm" href="/planner">Open planner →</a>
+      </div>
+      {% if upcoming %}
+      <ul class="space-y-2.5">
+        {% for it in upcoming %}{{ task_card(it, show_project=true) }}{% endfor %}
+      </ul>
+      {% else %}
+      <div class="card p-8 text-center muted">No scheduled deadlines yet. Set a project start date so durations resolve into dates.</div>
+      {% endif %}
+    </section>
+
+    <!-- PROJECTS -->
+    <section class="reveal" style="animation-delay:.26s">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Projects</h2>
+        <a class="link text-sm" href="/projects">View all →</a>
+      </div>
+      {% if not projects %}
+      <div class="card p-8 text-center muted">No projects yet. <a class="link" href="/upload">Create one</a>.</div>
+      {% endif %}
+      <div class="grid sm:grid-cols-2 gap-4">
+        {% for p in projects[:4] %}
+        <a href="/project/{{ p.id }}" class="card p-5 block" data-card>
+          <div class="flex items-start justify-between gap-3">
+            <h3 class="font-semibold tracking-tight">{{ p.title }}</h3>
+            <span class="pill">{{ p.item_count }} tasks</span>
+          </div>
+          {% if p.summary %}<p class="text-sm muted mt-1">{{ p.summary }}</p>{% endif %}
+          <div class="mt-4 flex items-center gap-3">
+            {{ bar(p.progress.percent) }}
+            <span class="font-mono text-sm shrink-0">{{ p.progress.percent }}%</span>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <!-- AI PLANNER ASIDE -->
+  <aside class="space-y-4" data-aside>
+    <div class="card p-5 reveal" style="animation-delay:.12s">
+      <div class="flex items-center gap-2">
+        <span class="grid h-7 w-7 place-items-center rounded-lg text-white" style="background:linear-gradient(135deg,var(--accent-2),var(--accent-deep))">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>
+        </span>
+        <h2 class="font-semibold">AI Planner</h2>
+      </div>
+      <ul class="mt-4 space-y-3 text-sm">
+        {% if hero.overdue %}
+        <li class="flex gap-2.5"><span class="u-dot u-overdue mt-1.5"></span><span><b>{{ hero.overdue }} overdue</b> — clear these before starting new work to avoid pile-up.</span></li>
+        {% endif %}
+        {% if upcoming %}
+        <li class="flex gap-2.5"><span class="u-dot u-due-soon mt-1.5"></span><span>Next up: <b>{{ upcoming[0].title }}</b>{% if upcoming[0].resolved_date %} on <span class="font-mono">{{ upcoming[0].resolved_date }}</span>{% endif %}.</span></li>
+        {% endif %}
+        {% if hero.everyday_total and hero.everyday_done < hero.everyday_total %}
+        <li class="flex gap-2.5"><span class="u-dot u-upcoming mt-1.5"></span><span>{{ hero.everyday_total - hero.everyday_done }} everyday task{{ 's' if (hero.everyday_total - hero.everyday_done) != 1 }} left for today.</span></li>
+        {% endif %}
+        <li class="flex gap-2.5"><span class="u-dot u-done mt-1.5"></span><span>Focus score <b>{{ hero.focus }}</b> — {{ 'strong, protect your deep-work blocks.' if hero.focus >= 70 else 'tackle a high-effort task to lift it.' }}</span></li>
+      </ul>
+      <p class="faint text-[11px] mt-4">Heuristic suggestions from your live data.</p>
     </div>
-    <p class="text-xs text-slate-500 mt-1">{{ p.progress.done }}/{{ p.progress.total }} done ({{ p.progress.percent }}%)</p>
-  </li>
-  {% endfor %}
-</ul>
+
+    <div class="card p-5 reveal" style="animation-delay:.16s">
+      <h2 class="font-semibold mb-3">Quick actions</h2>
+      <div class="grid grid-cols-2 gap-2.5">
+        <a class="btn btn-accent" href="/upload">+ Task</a>
+        <a class="btn" href="/upload">+ Project</a>
+        <a class="btn" href="/today">Focus</a>
+        <a class="btn" href="/calendar">Calendar</a>
+      </div>
+    </div>
+  </aside>
+</div>
 {% endblock %}

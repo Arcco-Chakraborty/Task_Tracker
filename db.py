@@ -283,6 +283,29 @@ def set_everyday_day(conn, everyday_id, day, done) -> None:
     conn.commit()
 
 
+def all_completion_days(conn) -> set:
+    """All distinct days (YYYY-MM-DD) with any everyday completion."""
+    rows = conn.execute("SELECT DISTINCT day FROM everyday_completions").fetchall()
+    return {r["day"] for r in rows}
+
+
+def count_everyday_items(conn) -> int:
+    return conn.execute("SELECT COUNT(*) AS c FROM everyday_items").fetchone()["c"]
+
+
+def count_everyday_done_on(conn, day) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) AS c FROM everyday_completions WHERE day = ?",
+        (day,)).fetchone()["c"]
+
+
+def count_done_items_since(conn, since) -> int:
+    """Plan items marked done with updated_at on/after `since` (a date string)."""
+    return conn.execute(
+        "SELECT COUNT(*) AS c FROM items WHERE status = 'done' "
+        "AND updated_at >= ?", (since,)).fetchone()["c"]
+
+
 def list_everyday_completions(conn, project_id, since_day) -> set:
     """Return {(everyday_id, day)} completions for a project's everyday items
     on or after since_day (inclusive)."""

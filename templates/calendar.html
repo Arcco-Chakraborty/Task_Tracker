@@ -1,14 +1,32 @@
 {% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
 {% block body %}
-<h1 class="text-2xl font-bold mb-4">Calendar</h1>
-{% if not by_date %}<p class="text-slate-500">No dated items yet.</p>{% endif %}
-<div class="space-y-4">
+<h1 class="text-2xl md:text-3xl font-semibold tracking-tight reveal">Calendar</h1>
+<p class="muted mt-1 reveal" style="animation-delay:.04s">Resolved deadlines across every project.</p>
+{% if not by_date %}<div class="card p-8 text-center muted mt-6">No dated items yet.</div>{% endif %}
+
+<div class="mt-6 space-y-4">
   {% for day, items in by_date %}
-  <div class="bg-white rounded shadow p-3">
-    <h2 class="font-semibold text-slate-700">{{ day }}</h2>
-    <ul class="mt-1 space-y-1">
+  <div class="card p-5 reveal" data-card>
+    <div class="flex items-center gap-3 mb-3">
+      <span class="grid place-items-center h-11 w-11 rounded-xl font-mono"
+            style="background:var(--accent-soft);color:var(--accent)">
+        <span class="text-base font-semibold leading-none">{{ day[8:10] }}</span>
+      </span>
+      <div>
+        <p class="font-semibold">{{ day }}</p>
+        <p class="text-xs faint">{{ items|length }} task{{ 's' if items|length != 1 }}</p>
+      </div>
+    </div>
+    <ul class="space-y-2">
       {% for i in items %}
-      <li class="text-sm"><a href="/project/{{ i.project_id }}" class="text-blue-700 hover:underline">{{ i.project_title }}</a> — {{ i.title }}{% if i.resolved_date %} <a class="text-xs text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" href="{{ gcal_link(i.project_title ~ ': ' ~ i.title, i.resolved_date) }}" title="Add to Google Calendar">+GCal</a>{% endif %}</li>
+      <li class="flex items-center gap-2.5 text-sm">
+        <span class="u-dot u-{{ i.urgency }}"></span>
+        <a href="/project/{{ i.project_id }}" class="link">{{ i.project_title }}</a>
+        <span class="muted">·</span><span>{{ i.title }}</span>
+        {% if i.time_sensitive %}<span class="pill pill-bad">&#9200;</span>{% endif %}
+        {% if i.resolved_date %}<a class="link ml-auto text-xs" target="_blank" rel="noopener noreferrer" href="{{ gcal_link(i.project_title ~ ': ' ~ i.title, i.resolved_date) }}">+ Google Calendar</a>{% endif %}
+      </li>
       {% endfor %}
     </ul>
   </div>
