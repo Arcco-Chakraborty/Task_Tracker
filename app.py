@@ -79,9 +79,10 @@ def _project_view(conn, project, due_soon_days, today=None):
     }
 
 
-def _everyday_view(conn, project_id, today, days_back=7):
-    """Attach a per-day completion grid (last `days_back` days, oldest->today)
-    to each everyday item, and compute today's completion summary."""
+def _everyday_view(conn, project_id, today, days_back=14):
+    """Attach a per-day completion grid (last `days_back` days up to today,
+    oldest->today; no future days) to each everyday item, and compute today's
+    completion summary. Only today is editable; past days are read-only."""
     window = [today - timedelta(days=n) for n in range(days_back - 1, -1, -1)]
     today_iso = today.isoformat()
     completed = db.list_everyday_completions(conn, project_id,
@@ -95,6 +96,7 @@ def _everyday_view(conn, project_id, today, days_back=7):
             "dom": d.day,
             "done": (item["id"], d.isoformat()) in completed,
             "is_today": d == today,
+            "editable": d == today,
         } for d in window]
         if (item["id"], today_iso) in completed:
             done_today += 1
@@ -274,6 +276,10 @@ def create_app(cfg=None) -> Flask:
         day = payload.get("day")
         if not day:
             return jsonify({"ok": False, "error": "missing day"}), 400
+        # Only today can be ticked off — no back- or future-dating.
+        if day != date.today().isoformat():
+            return jsonify({"ok": False,
+                            "error": "only today can be updated"}), 403
         db.set_everyday_day(get_conn(flask_app), everyday_id, day,
                             bool(payload.get("done")))
         return jsonify({"ok": True})

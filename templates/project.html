@@ -69,12 +69,17 @@
           <button class="js-delete-everyday text-slate-400 hover:text-red-600 text-sm">x</button>
         </div>
       </div>
-      <div class="mt-3 flex gap-2">
+      <div class="mt-3 flex flex-wrap gap-2">
         {% for d in item.days %}
-        <label class="flex flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[10px] {% if d.is_today %}bg-sky-50 font-bold text-sky-700{% else %}text-slate-400{% endif %}">
+        <label class="flex flex-col items-center gap-0.5 rounded px-1.5 py-1 text-[10px] {% if d.is_today %}bg-sky-50 font-bold text-sky-700{% else %}text-slate-400{% endif %}"
+               title="{{ d.date }}{% if not d.editable %} (read-only){% endif %}">
           <span>{{ d.label }}</span>
-          <input type="checkbox" class="js-everyday-day h-4 w-4 {% if d.is_today %}accent-sky-600{% endif %}"
+          {% if d.editable %}
+          <input type="checkbox" class="js-everyday-day h-4 w-4 accent-sky-600"
                  data-everyday-id="{{ item.id }}" data-day="{{ d.date }}" {% if d.done %}checked{% endif %}>
+          {% else %}
+          <input type="checkbox" class="h-4 w-4 cursor-not-allowed opacity-70" disabled {% if d.done %}checked{% endif %}>
+          {% endif %}
           <span>{{ d.dom }}</span>
         </label>
         {% endfor %}
@@ -105,7 +110,7 @@
             <p class="font-medium {% if item.status == 'done' %}line-through text-slate-400{% endif %}">{{ item.title }}</p>
             {% if item.description %}<p class="text-sm text-slate-500 whitespace-pre-wrap">{{ item.description }}</p>{% endif %}
           </div>
-          {% if item.weight and item.weight >= 4 %}<span class="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">high</span>{% elif item.weight and item.weight <= 2 %}<span class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">low</span>{% endif %}
+          <span class="shrink-0 font-mono text-[11px] leading-none text-amber-500" title="effort {{ item.weight }}/5">{{ '●' * item.weight }}{{ '○' * (5 - item.weight) }}</span>
           <span class="shrink-0 text-xs px-2 py-1 rounded {{ badge[item.urgency] }}">
             {% if item.resolved_date %}{{ item.resolved_date }}{% elif item.duration_days %}~{{ item.duration_days }}d{% else %}-{% endif %}
           </span>

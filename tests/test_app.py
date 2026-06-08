@@ -163,15 +163,28 @@ def test_export_ics(tmp_path):
 
 
 def test_everyday_day_toggle(tmp_path):
+    from datetime import date
+    today = date.today().isoformat()
     flask_app, client = _client(tmp_path)
     conn = app_module.get_conn(flask_app)
     pid = db.create_project(conn, "P", "", "text", "x")
     eid = db.create_everyday_item(conn, pid, "Standup", position=0)
-    r = client.post(f"/everyday/{eid}/day", json={"day": "2026-06-08", "done": True})
+    r = client.post(f"/everyday/{eid}/day", json={"day": today, "done": True})
     assert r.status_code == 200
-    assert (eid, "2026-06-08") in db.list_everyday_completions(conn, pid, "2026-06-01")
-    client.post(f"/everyday/{eid}/day", json={"day": "2026-06-08", "done": False})
-    assert (eid, "2026-06-08") not in db.list_everyday_completions(conn, pid, "2026-06-01")
+    assert (eid, today) in db.list_everyday_completions(conn, pid, "2000-01-01")
+    client.post(f"/everyday/{eid}/day", json={"day": today, "done": False})
+    assert (eid, today) not in db.list_everyday_completions(conn, pid, "2000-01-01")
+
+
+def test_everyday_day_rejects_non_today(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    pid = db.create_project(conn, "P", "", "text", "x")
+    eid = db.create_everyday_item(conn, pid, "Standup", position=0)
+    # yesterday / any non-today date must be refused
+    r = client.post(f"/everyday/{eid}/day", json={"day": "2000-01-01", "done": True})
+    assert r.status_code == 403
+    assert db.list_everyday_completions(conn, pid, "1999-01-01") == set()
 
 
 def test_everyday_day_requires_day(tmp_path):

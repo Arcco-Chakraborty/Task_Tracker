@@ -16,8 +16,12 @@ states or clearly implies one.
 - Otherwise estimate "duration_days" (an integer) for a recommended timeline, \
 and set "deadline" to null. Do not invent calendar dates.
 - If you know neither, set both to null.
-- Set "weight" to an integer 1-5 for how serious/important each item is \
-(5 = critical/high-stakes, 3 = normal, 1 = trivial). Default to 3 if unsure.
+- Set "weight" to an integer 1-5 for how much EFFORT/TIME each item takes: \
+1 = a few minutes / trivial (e.g. "set up environment", "create a repo"), \
+2 = up to an hour, 3 = a few hours, 4 = roughly a full day, \
+5 = multiple days / major undertaking (e.g. "study a 4-hour lecture series", \
+"build the whole API"). Use the FULL range and DIFFERENTIATE items by real \
+effort - do NOT mark everything high; most checklists have a mix.
 - Put recurring/background/everyday work in "everyday_items", not in phases.
 - Preserve names, constraints, decisions, deliverables, tools, links, files, \
 contacts, references, and other specifics in "info_cards" and "resources".
