@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from flask import (Flask, abort, jsonify, redirect, render_template, request,
-                   url_for, Response)
+from flask import (Flask, abort, g, has_app_context, jsonify, redirect,
+                   render_template, request, url_for, Response)
 
 import db
 import extract
@@ -15,8 +15,24 @@ from config import load_config
 
 
 def get_conn(flask_app):
-    """One sqlite connection per app (single-user, local)."""
-    return flask_app.config["CONN"]
+    """Return a SQLite connection.
+
+    SQLite forbids using a connection from a thread other than the one that
+    created it, and Flask's dev server serves each request on its own thread.
+    So inside a request/app context we use a per-request connection cached on
+    `g` (and closed on teardown). Outside any app context — e.g. tests that
+    seed/assert by calling get_conn directly — we fall back to a persistent
+    connection stored on the app config (only ever touched on that thread).
+    """
+    db_path = flask_app.config["DB_PATH"]
+    if has_app_context():
+        if "conn" not in g:
+            g.conn = db.connect(db_path)
+        return g.conn
+    conn = flask_app.config.get("CONN")
+    if conn is None:
+        conn = flask_app.config["CONN"] = db.connect(db_path)
+    return conn
 
 
 def _project_view(conn, project, due_soon_days, today=None):
@@ -72,12 +88,22 @@ def create_app(cfg=None) -> Flask:
     cfg = cfg or load_config()
     flask_app = Flask(__name__)
     db_path = cfg.get("app", {}).get("db_path", "tasktracker.db")
-    conn = db.connect(db_path)
-    db.init_db(conn)
-    flask_app.config["CONN"] = conn
+    flask_app.config["DB_PATH"] = db_path
+    flask_app.config["CONN"] = None
     flask_app.config["CFG"] = cfg
     flask_app.config["DUE_SOON_DAYS"] = cfg.get("tracking", {}).get(
         "due_soon_days", 3)
+
+    # Create the schema once at startup (separate short-lived connection).
+    init_conn = db.connect(db_path)
+    db.init_db(init_conn)
+    init_conn.close()
+
+    @flask_app.teardown_appcontext
+    def _close_conn(exc):  # noqa: ARG001 - Flask passes the exception
+        conn = g.pop("conn", None)
+        if conn is not None:
+            conn.close()
 
     @flask_app.route("/")
     def index():
