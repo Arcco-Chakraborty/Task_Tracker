@@ -7,13 +7,24 @@ def _client(tmp_path):
     cfg = {"app": {"db_path": db_path}, "tracking": {"due_soon_days": 3}}
     flask_app = app_module.create_app(cfg)
     flask_app.config.update(TESTING=True)
-    return flask_app, flask_app.test_client()
+    client = flask_app.test_client()
+    # log in a test user so the (now auth-gated) routes are reachable
+    conn = app_module.get_conn(flask_app)
+    user = db.get_or_create_user(conn, "tester@example.com", "Tester", "")
+    flask_app.config["TEST_UID"] = user["id"]
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+    return flask_app, client
+
+
+def _uid(flask_app):
+    return flask_app.config["TEST_UID"]
 
 
 def _seed(flask_app):
     conn = app_module.get_conn(flask_app)
     pid = db.create_project(conn, "My Project", "summary", "text", "typed",
-                            start_date="2026-06-01")
+                            start_date="2026-06-01", user_id=_uid(flask_app))
     ph = db.create_phase(conn, pid, "Phase 1", 0)
     db.create_item(conn, ph, "First item", "desc", duration_days=2, position=0)
     return pid
@@ -167,7 +178,7 @@ def test_everyday_day_toggle(tmp_path):
     today = date.today().isoformat()
     flask_app, client = _client(tmp_path)
     conn = app_module.get_conn(flask_app)
-    pid = db.create_project(conn, "P", "", "text", "x")
+    pid = db.create_project(conn, "P", "", "text", "x", user_id=_uid(flask_app))
     eid = db.create_everyday_item(conn, pid, "Standup", position=0)
     r = client.post(f"/everyday/{eid}/day", json={"day": today, "done": True})
     assert r.status_code == 200
@@ -179,7 +190,7 @@ def test_everyday_day_toggle(tmp_path):
 def test_everyday_day_rejects_non_today(tmp_path):
     flask_app, client = _client(tmp_path)
     conn = app_module.get_conn(flask_app)
-    pid = db.create_project(conn, "P", "", "text", "x")
+    pid = db.create_project(conn, "P", "", "text", "x", user_id=_uid(flask_app))
     eid = db.create_everyday_item(conn, pid, "Standup", position=0)
     # yesterday / any non-today date must be refused
     r = client.post(f"/everyday/{eid}/day", json={"day": "2000-01-01", "done": True})
@@ -190,7 +201,7 @@ def test_everyday_day_rejects_non_today(tmp_path):
 def test_everyday_day_requires_day(tmp_path):
     flask_app, client = _client(tmp_path)
     conn = app_module.get_conn(flask_app)
-    pid = db.create_project(conn, "P", "", "text", "x")
+    pid = db.create_project(conn, "P", "", "text", "x", user_id=_uid(flask_app))
     eid = db.create_everyday_item(conn, pid, "Standup", position=0)
     assert client.post(f"/everyday/{eid}/day", json={"done": True}).status_code == 400
 
@@ -198,7 +209,8 @@ def test_everyday_day_requires_day(tmp_path):
 def test_project_page_has_day_grid_and_gcal(tmp_path):
     flask_app, client = _client(tmp_path)
     conn = app_module.get_conn(flask_app)
-    pid = db.create_project(conn, "P", "summary", "text", "x", start_date="2026-06-01")
+    pid = db.create_project(conn, "P", "summary", "text", "x",
+                            start_date="2026-06-01", user_id=_uid(flask_app))
     db.create_everyday_item(conn, pid, "Standup", position=0)
     ph = db.create_phase(conn, pid, "Phase", 0)
     db.create_item(conn, ph, "Task", "", deadline="2026-06-20", position=0)
@@ -218,3 +230,34 @@ def test_project_delete(tmp_path):
     assert db.get_project(conn, pid) is None
     # cascade: phases gone too
     assert db.list_phases(conn, pid) == []
+
+
+def test_anonymous_redirected_to_login(tmp_path):
+    db_path = str(tmp_path / "t.db")
+    cfg = {"app": {"db_path": db_path}, "tracking": {"due_soon_days": 3}}
+    flask_app = app_module.create_app(cfg)
+    client = flask_app.test_client()  # no session
+    for path in ("/", "/projects", "/today", "/calendar", "/analytics"):
+        r = client.get(path)
+        assert r.status_code == 302 and "/login" in r.headers["Location"]
+    assert client.get("/login").status_code == 200
+
+
+def test_users_are_isolated(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    mine = _seed(flask_app)  # owned by tester
+    other = db.get_or_create_user(conn, "other@example.com", "Other", "")
+    theirs = db.create_project(conn, "Secret", "", "text", "x",
+                               user_id=other["id"])
+    # dashboard / index only show my project
+    body = client.get("/").data
+    assert b"My Project" in body and b"Secret" not in body
+    # cannot open or delete someone else's project
+    assert client.get(f"/project/{theirs}").status_code == 404
+    assert client.post(f"/project/{theirs}/delete").status_code == 200  # no-op
+    assert db.get_project(conn, theirs) is not None  # still there
+    # cannot toggle an item in someone else's project
+    tph = db.create_phase(conn, theirs, "P", 0)
+    tit = db.create_item(conn, tph, "x", position=0)
+    assert client.post(f"/item/{tit}/status", json={"status": "done"}).status_code == 403

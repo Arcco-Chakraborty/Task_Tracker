@@ -46,14 +46,19 @@
     </div>
 
     <!-- profile -->
-    <div class="nav-item" style="cursor:default">
+    {% set uname = (user.name or user.email) if user else 'Guest' %}
+    <a href="/logout" class="nav-item" title="Sign out">
+      {% if user and user.picture %}
+      <img src="{{ user.picture }}" alt="" class="h-7 w-7 rounded-full shrink-0 object-cover" referrerpolicy="no-referrer">
+      {% else %}
       <span class="grid h-7 w-7 place-items-center rounded-full text-[12px] font-bold text-white shrink-0"
-            style="background:linear-gradient(135deg,#ff5d63,#7a0b1e)">A</span>
+            style="background:linear-gradient(135deg,#ff5d63,#7a0b1e)">{{ uname[0]|upper }}</span>
+      {% endif %}
       <span class="nav-label">
-        <span class="block text-[13px] font-semibold text-[var(--text)] leading-tight">Arcco</span>
-        <span class="block text-[11px] faint">Pro workspace</span>
+        <span class="block text-[13px] font-semibold text-[var(--text)] leading-tight">{{ uname }}</span>
+        <span class="block text-[11px] faint">Sign out</span>
       </span>
-    </div>
+    </a>
 
     <!-- search -->
     <div class="relative my-2 sidebar-only">
@@ -120,8 +125,14 @@
         <button class="icon-btn" title="Notifications">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
         </button>
+        <a href="/logout" title="Sign out">
+        {% if user and user.picture %}
+        <img src="{{ user.picture }}" alt="" class="h-9 w-9 rounded-full object-cover" referrerpolicy="no-referrer">
+        {% else %}
         <span class="grid h-9 w-9 place-items-center rounded-full text-[12px] font-bold text-white"
-              style="background:linear-gradient(135deg,#ff5d63,#7a0b1e)">A</span>
+              style="background:linear-gradient(135deg,#ff5d63,#7a0b1e)">{{ ((user.name or user.email)[0]|upper) if user else 'A' }}</span>
+        {% endif %}
+        </a>
       </div>
     </header>
 

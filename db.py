@@ -4,8 +4,16 @@ from __future__ import annotations
 import sqlite3
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    email      TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL DEFAULT '',
+    picture    TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS projects (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
     title       TEXT NOT NULL,
     summary     TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL,
@@ -89,45 +97,117 @@ def init_db(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE items ADD COLUMN time_sensitive INTEGER NOT NULL "
             "DEFAULT 0")
+    pcols = [r["name"] for r in
+             conn.execute("PRAGMA table_info(projects)").fetchall()]
+    if "user_id" not in pcols:
+        conn.execute("ALTER TABLE projects ADD COLUMN user_id INTEGER")
     conn.commit()
+
+
+# --- users -----------------------------------------------------------------
+
+def get_or_create_user(conn, email, name="", picture="") -> dict:
+    """Return the user row for an email, creating/refreshing it on login."""
+    row = conn.execute("SELECT * FROM users WHERE email = ?",
+                       (email,)).fetchone()
+    if row is None:
+        cur = conn.execute(
+            "INSERT INTO users (email, name, picture) VALUES (?, ?, ?)",
+            (email, name, picture))
+        conn.commit()
+        return get_user(conn, cur.lastrowid)
+    # keep name/picture fresh
+    conn.execute("UPDATE users SET name = ?, picture = ? WHERE id = ?",
+                 (name or row["name"], picture or row["picture"], row["id"]))
+    conn.commit()
+    return dict(conn.execute("SELECT * FROM users WHERE id = ?",
+                             (row["id"],)).fetchone())
+
+
+def get_user(conn, user_id) -> dict | None:
+    row = conn.execute("SELECT * FROM users WHERE id = ?",
+                       (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def owns_item(conn, item_id, user_id) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM items i JOIN phases ph ON i.phase_id = ph.id "
+        "JOIN projects p ON ph.project_id = p.id "
+        "WHERE i.id = ? AND p.user_id = ?", (item_id, user_id)).fetchone()
+    return row is not None
+
+
+def owns_phase(conn, phase_id, user_id) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM phases ph JOIN projects p ON ph.project_id = p.id "
+        "WHERE ph.id = ? AND p.user_id = ?", (phase_id, user_id)).fetchone()
+    return row is not None
+
+
+def owns_everyday(conn, everyday_id, user_id) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM everyday_items e JOIN projects p ON e.project_id = p.id "
+        "WHERE e.id = ? AND p.user_id = ?", (everyday_id, user_id)).fetchone()
+    return row is not None
 
 
 # --- projects --------------------------------------------------------------
 
 def create_project(conn, title, summary, source_type, source_name,
-                   start_date=None, due_date=None) -> int:
+                   start_date=None, due_date=None, user_id=None) -> int:
     cur = conn.execute(
-        "INSERT INTO projects (title, summary, source_type, source_name, "
-        "start_date, due_date) VALUES (?, ?, ?, ?, ?, ?)",
-        (title, summary, source_type, source_name, start_date, due_date),
+        "INSERT INTO projects (user_id, title, summary, source_type, "
+        "source_name, start_date, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, title, summary, source_type, source_name, start_date, due_date),
     )
     conn.commit()
     return cur.lastrowid
 
 
-def get_project(conn, project_id) -> dict | None:
-    row = conn.execute("SELECT * FROM projects WHERE id = ?",
-                       (project_id,)).fetchone()
+def get_project(conn, project_id, user_id=None) -> dict | None:
+    """Fetch a project. When user_id is given, only return it if owned."""
+    if user_id is not None:
+        row = conn.execute("SELECT * FROM projects WHERE id = ? AND user_id = ?",
+                           (project_id, user_id)).fetchone()
+    else:
+        row = conn.execute("SELECT * FROM projects WHERE id = ?",
+                           (project_id,)).fetchone()
     return dict(row) if row else None
 
 
-def list_projects(conn) -> list[dict]:
-    rows = conn.execute(
-        "SELECT * FROM projects ORDER BY created_at DESC, id DESC").fetchall()
+def list_projects(conn, user_id=None) -> list[dict]:
+    if user_id is not None:
+        rows = conn.execute(
+            "SELECT * FROM projects WHERE user_id = ? "
+            "ORDER BY created_at DESC, id DESC", (user_id,)).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM projects ORDER BY created_at DESC, id DESC").fetchall()
     return [dict(r) for r in rows]
 
 
-def update_project_dates(conn, project_id, start_date, due_date) -> None:
-    conn.execute(
-        "UPDATE projects SET start_date = ?, due_date = ?, "
-        "updated_at = datetime('now') WHERE id = ?",
-        (start_date, due_date, project_id),
-    )
+def update_project_dates(conn, project_id, start_date, due_date,
+                         user_id=None) -> None:
+    if user_id is not None:
+        conn.execute(
+            "UPDATE projects SET start_date = ?, due_date = ?, "
+            "updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+            (start_date, due_date, project_id, user_id))
+    else:
+        conn.execute(
+            "UPDATE projects SET start_date = ?, due_date = ?, "
+            "updated_at = datetime('now') WHERE id = ?",
+            (start_date, due_date, project_id))
     conn.commit()
 
 
-def delete_project(conn, project_id) -> None:
-    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+def delete_project(conn, project_id, user_id=None) -> None:
+    if user_id is not None:
+        conn.execute("DELETE FROM projects WHERE id = ? AND user_id = ?",
+                     (project_id, user_id))
+    else:
+        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     conn.commit()
 
 
@@ -283,24 +363,50 @@ def set_everyday_day(conn, everyday_id, day, done) -> None:
     conn.commit()
 
 
-def all_completion_days(conn) -> set:
-    """All distinct days (YYYY-MM-DD) with any everyday completion."""
-    rows = conn.execute("SELECT DISTINCT day FROM everyday_completions").fetchall()
+def all_completion_days(conn, user_id=None) -> set:
+    """All distinct days (YYYY-MM-DD) with any everyday completion (scoped)."""
+    if user_id is not None:
+        rows = conn.execute(
+            "SELECT DISTINCT c.day AS day FROM everyday_completions c "
+            "JOIN everyday_items e ON c.everyday_id = e.id "
+            "JOIN projects p ON e.project_id = p.id WHERE p.user_id = ?",
+            (user_id,)).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT DISTINCT day FROM everyday_completions").fetchall()
     return {r["day"] for r in rows}
 
 
-def count_everyday_items(conn) -> int:
+def count_everyday_items(conn, user_id=None) -> int:
+    if user_id is not None:
+        return conn.execute(
+            "SELECT COUNT(*) AS c FROM everyday_items e "
+            "JOIN projects p ON e.project_id = p.id WHERE p.user_id = ?",
+            (user_id,)).fetchone()["c"]
     return conn.execute("SELECT COUNT(*) AS c FROM everyday_items").fetchone()["c"]
 
 
-def count_everyday_done_on(conn, day) -> int:
+def count_everyday_done_on(conn, day, user_id=None) -> int:
+    if user_id is not None:
+        return conn.execute(
+            "SELECT COUNT(*) AS c FROM everyday_completions c "
+            "JOIN everyday_items e ON c.everyday_id = e.id "
+            "JOIN projects p ON e.project_id = p.id "
+            "WHERE c.day = ? AND p.user_id = ?", (day, user_id)).fetchone()["c"]
     return conn.execute(
         "SELECT COUNT(*) AS c FROM everyday_completions WHERE day = ?",
         (day,)).fetchone()["c"]
 
 
-def count_done_items_since(conn, since) -> int:
+def count_done_items_since(conn, since, user_id=None) -> int:
     """Plan items marked done with updated_at on/after `since` (a date string)."""
+    if user_id is not None:
+        return conn.execute(
+            "SELECT COUNT(*) AS c FROM items i "
+            "JOIN phases ph ON i.phase_id = ph.id "
+            "JOIN projects p ON ph.project_id = p.id "
+            "WHERE i.status = 'done' AND i.updated_at >= ? AND p.user_id = ?",
+            (since, user_id)).fetchone()["c"]
     return conn.execute(
         "SELECT COUNT(*) AS c FROM items WHERE status = 'done' "
         "AND updated_at >= ?", (since,)).fetchone()["c"]
@@ -353,7 +459,8 @@ def list_item_resources(conn, item_id) -> list[dict]:
 # --- composite -------------------------------------------------------------
 
 def create_project_from_extraction(conn, extraction, source_type, source_name,
-                                   start_date=None, due_date=None) -> int:
+                                   start_date=None, due_date=None,
+                                   user_id=None) -> int:
     """Insert a project + its phases + items from a normalized extraction dict.
     start_date/due_date override the model's suggested_* when provided."""
     pid = create_project(
@@ -363,6 +470,7 @@ def create_project_from_extraction(conn, extraction, source_type, source_name,
         source_type, source_name,
         start_date or extraction.get("suggested_start"),
         due_date or extraction.get("suggested_due"),
+        user_id=user_id,
     )
     for c_pos, card in enumerate(extraction.get("info_cards", [])):
         create_info_card(

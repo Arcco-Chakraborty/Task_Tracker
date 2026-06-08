@@ -1,6 +1,8 @@
 """app.py — Flask app for the task tracker."""
 from __future__ import annotations
 
+import os
+import secrets
 from datetime import date, datetime, timedelta
 
 from flask import (Flask, abort, g, has_app_context, jsonify, redirect,
@@ -11,7 +13,8 @@ import extract
 import ics
 import llm
 import schedule
-from config import load_config
+from auth import auth_bp, current_user, current_user_id, login_required
+from config import load_config, load_dotenv
 
 
 def get_conn(flask_app):
@@ -107,12 +110,12 @@ def _everyday_view(conn, project_id, today, days_back=14):
     return rows, today_summary
 
 
-def _all_dated_items(conn, due_soon_days, today=None):
-    """Return every item across projects with resolved date + urgency,
-    grouped per project so durations accumulate correctly."""
+def _all_dated_items(conn, due_soon_days, today=None, user_id=None):
+    """Return every item across the user's projects with resolved date +
+    urgency, grouped per project so durations accumulate correctly."""
     today = today or date.today()
     out = []
-    for project in db.list_projects(conn):
+    for project in db.list_projects(conn, user_id):
         ordered_items = []
         for phase in db.list_phases(conn, project["id"]):
             ordered_items.extend(db.list_items(conn, phase["id"]))
@@ -142,6 +145,7 @@ def _streak(days: set, today) -> int:
 
 
 def create_app(cfg=None) -> Flask:
+    load_dotenv()
     cfg = cfg or load_config()
     flask_app = Flask(__name__)
     db_path = cfg.get("app", {}).get("db_path", "tasktracker.db")
@@ -150,6 +154,23 @@ def create_app(cfg=None) -> Flask:
     flask_app.config["CFG"] = cfg
     flask_app.config["DUE_SOON_DAYS"] = cfg.get("tracking", {}).get(
         "due_soon_days", 3)
+
+    # --- sessions & auth (Google OAuth, ported from arctronas) ---
+    flask_app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+    flask_app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("HTTPS_ENABLED", "").lower() == "true",
+        PERMANENT_SESSION_LIFETIME=86400,
+        GOOGLE_CLIENT_ID=os.environ.get("GOOGLE_OAUTH_CLIENT_ID", ""),
+        GOOGLE_CLIENT_SECRET=os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+        GOOGLE_REDIRECT_URI=os.environ.get(
+            "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/auth/callback"),
+        ALLOWED_EMAILS=os.environ.get("ALLOWED_EMAILS", ""),
+        GET_CONN=lambda: get_conn(flask_app),
+    )
+    flask_app.register_blueprint(auth_bp)
+
     # Expose the Google Calendar link builder to templates.
     flask_app.jinja_env.globals["gcal_link"] = ics.gcal_link
 
@@ -164,21 +185,33 @@ def create_app(cfg=None) -> Flask:
         if conn is not None:
             conn.close()
 
+    @flask_app.after_request
+    def _security_headers(resp):
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return resp
+
     @flask_app.context_processor
     def _inject_globals():
-        """`now` and `stats` (streak + week's completions) for the chrome."""
+        """`now`, `user`, and per-user `stats` for the chrome."""
+        uid = current_user_id()
+        base = {"now": datetime.now(), "user": current_user(),
+                "stats": {"streak": 0, "week_done": 0}}
+        if uid is None:
+            return base
         conn = get_conn(flask_app)
         today = date.today()
-        days = db.all_completion_days(conn)
+        days = db.all_completion_days(conn, uid)
         week_ago = (today - timedelta(days=7)).isoformat()
-        week_done = (db.count_done_items_since(conn, week_ago)
+        week_done = (db.count_done_items_since(conn, week_ago, uid)
                      + sum(1 for d in days if d >= week_ago))
-        return {"now": datetime.now(),
-                "stats": {"streak": _streak(days, today), "week_done": week_done}}
+        base["stats"] = {"streak": _streak(days, today), "week_done": week_done}
+        return base
 
-    def _projects_with_progress(conn):
+    def _projects_with_progress(conn, user_id):
         projects = []
-        for p in db.list_projects(conn):
+        for p in db.list_projects(conn, user_id):
             items = []
             for ph in db.list_phases(conn, p["id"]):
                 items.extend(db.list_items(conn, ph["id"]))
@@ -187,12 +220,14 @@ def create_app(cfg=None) -> Flask:
         return projects
 
     @flask_app.route("/")
+    @login_required
     def index():
         conn = get_conn(flask_app)
+        uid = current_user_id()
         today = date.today()
         due_soon = flask_app.config["DUE_SOON_DAYS"]
-        projects = _projects_with_progress(conn)
-        items = _all_dated_items(conn, due_soon, today)
+        projects = _projects_with_progress(conn, uid)
+        items = _all_dated_items(conn, due_soon, today, uid)
         done = sum(1 for i in items if i["status"] == "done")
         total = len(items)
         overdue = [i for i in items if i["urgency"] == "overdue"]
@@ -200,8 +235,8 @@ def create_app(cfg=None) -> Flask:
             (i for i in items if i["status"] != "done" and i["resolved_date"]
              and i["resolved_date"] >= today),
             key=lambda i: i["resolved_date"])[:5]
-        ev_total = db.count_everyday_items(conn)
-        ev_done = db.count_everyday_done_on(conn, today.isoformat())
+        ev_total = db.count_everyday_items(conn, uid)
+        ev_done = db.count_everyday_done_on(conn, today.isoformat(), uid)
         overall = round(done / total * 100) if total else 0
         focus = max(0, min(100, overall - len(overdue) * 8))
         hero = {
@@ -214,24 +249,27 @@ def create_app(cfg=None) -> Flask:
                                projects=projects, hero=hero, upcoming=upcoming)
 
     @flask_app.route("/projects")
+    @login_required
     def projects_page():
         conn = get_conn(flask_app)
         return render_template("projects.html", active="projects",
-                               projects=_projects_with_progress(conn))
+                               projects=_projects_with_progress(conn, current_user_id()))
 
     @flask_app.route("/today")
+    @login_required
     def today_page():
         conn = get_conn(flask_app)
+        uid = current_user_id()
         today = date.today()
         due_soon = flask_app.config["DUE_SOON_DAYS"]
-        items = _all_dated_items(conn, due_soon, today)
+        items = _all_dated_items(conn, due_soon, today, uid)
         focus = sorted(
             (i for i in items if i["status"] != "done"
              and i["urgency"] in ("overdue", "due-soon")),
             key=lambda i: (i["urgency"] != "overdue", i["resolved_date"] or date.max))
         # everyday items across all projects, with today's done state
         everyday = []
-        for p in db.list_projects(conn):
+        for p in db.list_projects(conn, uid):
             rows, _ = _everyday_view(conn, p["id"], today)
             for r in rows:
                 everyday.append({**r, "project_title": p["title"],
@@ -240,10 +278,12 @@ def create_app(cfg=None) -> Flask:
                                focus=focus, everyday=everyday)
 
     @flask_app.route("/planner")
+    @login_required
     def planner_page():
         conn = get_conn(flask_app)
         today = date.today()
-        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"], today)
+        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"], today,
+                                 current_user_id())
         groups = {}  # date-iso -> list (None bucket for unscheduled)
         for i in items:
             key = i["resolved_date"].isoformat() if i["resolved_date"] else None
@@ -254,10 +294,12 @@ def create_app(cfg=None) -> Flask:
                                dated=dated, undated=undated)
 
     @flask_app.route("/analytics")
+    @login_required
     def analytics_page():
         conn = get_conn(flask_app)
+        uid = current_user_id()
         today = date.today()
-        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"], today)
+        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"], today, uid)
         total = len(items)
         done = sum(1 for i in items if i["status"] == "done")
         by_urgency = {k: 0 for k in ("overdue", "due-soon", "upcoming", "none", "done")}
@@ -267,14 +309,13 @@ def create_app(cfg=None) -> Flask:
         for i in items:
             weight_dist[min(5, max(1, i.get("weight") or 3))] += 1
         # completions over the last 14 days
-        comp_days = db.all_completion_days(conn)
         trend = []
         for n in range(13, -1, -1):
             d = today - timedelta(days=n)
             trend.append({"label": d.strftime("%a")[0], "date": d.isoformat(),
-                          "done": db.count_everyday_done_on(conn, d.isoformat())})
+                          "done": db.count_everyday_done_on(conn, d.isoformat(), uid)})
         max_trend = max((t["done"] for t in trend), default=0) or 1
-        projects = _projects_with_progress(conn)
+        projects = _projects_with_progress(conn, uid)
         analytics = {
             "total": total, "done": done,
             "completion": round(done / total * 100) if total else 0,
@@ -287,20 +328,23 @@ def create_app(cfg=None) -> Flask:
                                analytics=analytics, projects=projects)
 
     @flask_app.route("/settings")
+    @login_required
     def settings_page():
         return render_template("settings.html", active="settings",
                                cfg=flask_app.config["CFG"])
 
     @flask_app.route("/project/<int:project_id>")
+    @login_required
     def project(project_id):
         conn = get_conn(flask_app)
-        p = db.get_project(conn, project_id)
+        p = db.get_project(conn, project_id, current_user_id())
         if p is None:
             abort(404)
         ctx = _project_view(conn, p, flask_app.config["DUE_SOON_DAYS"])
         return render_template("project.html", active="projects", **ctx)
 
     @flask_app.route("/upload", methods=["GET", "POST"])
+    @login_required
     def upload():
         conn = get_conn(flask_app)
         if request.method == "GET":
@@ -357,7 +401,8 @@ def create_app(cfg=None) -> Flask:
             ), 500
         try:
             pid = db.create_project_from_extraction(
-                conn, data, source_type, source_name, start_date, due_date)
+                conn, data, source_type, source_name, start_date, due_date,
+                user_id=current_user_id())
         except Exception as e:  # noqa: BLE001 - keep upload page alive
             flask_app.logger.exception("Project persistence failed")
             return render_template(
@@ -366,39 +411,73 @@ def create_app(cfg=None) -> Flask:
             ), 500
         return redirect(url_for("project", project_id=pid))
 
+    def _require_item(conn, item_id):
+        if not db.owns_item(conn, item_id, current_user_id()):
+            abort(403)
+
+    def _require_phase(conn, phase_id):
+        if not db.owns_phase(conn, phase_id, current_user_id()):
+            abort(403)
+
+    def _require_everyday(conn, everyday_id):
+        if not db.owns_everyday(conn, everyday_id, current_user_id()):
+            abort(403)
+
+    def _require_project(conn, project_id):
+        if db.get_project(conn, project_id, current_user_id()) is None:
+            abort(403)
+
     @flask_app.route("/item/<int:item_id>/status", methods=["POST"])
+    @login_required
     def item_status(item_id):
+        conn = get_conn(flask_app)
+        _require_item(conn, item_id)
         status = (request.json or {}).get("status", "todo")
-        db.set_item_status(get_conn(flask_app), item_id, status)
+        db.set_item_status(conn, item_id, status)
         return jsonify({"ok": True, "status": status})
 
     @flask_app.route("/item/<int:item_id>/edit", methods=["POST"])
+    @login_required
     def item_edit(item_id):
+        conn = get_conn(flask_app)
+        _require_item(conn, item_id)
         payload = request.json or {}
         fields = {k: payload[k] for k in
                   ("title", "description", "deadline", "duration_days")
                   if k in payload}
-        db.update_item(get_conn(flask_app), item_id, **fields)
+        db.update_item(conn, item_id, **fields)
         return jsonify({"ok": True})
 
     @flask_app.route("/item/<int:item_id>/delete", methods=["POST"])
+    @login_required
     def item_delete(item_id):
-        db.delete_item(get_conn(flask_app), item_id)
+        conn = get_conn(flask_app)
+        _require_item(conn, item_id)
+        db.delete_item(conn, item_id)
         return jsonify({"ok": True})
 
     @flask_app.route("/everyday/<int:everyday_id>/status", methods=["POST"])
+    @login_required
     def everyday_status(everyday_id):
+        conn = get_conn(flask_app)
+        _require_everyday(conn, everyday_id)
         status = (request.json or {}).get("status", "todo")
-        db.set_everyday_status(get_conn(flask_app), everyday_id, status)
+        db.set_everyday_status(conn, everyday_id, status)
         return jsonify({"ok": True, "status": status})
 
     @flask_app.route("/everyday/<int:everyday_id>/delete", methods=["POST"])
+    @login_required
     def everyday_delete(everyday_id):
-        db.delete_everyday_item(get_conn(flask_app), everyday_id)
+        conn = get_conn(flask_app)
+        _require_everyday(conn, everyday_id)
+        db.delete_everyday_item(conn, everyday_id)
         return jsonify({"ok": True})
 
     @flask_app.route("/everyday/<int:everyday_id>/day", methods=["POST"])
+    @login_required
     def everyday_day(everyday_id):
+        conn = get_conn(flask_app)
+        _require_everyday(conn, everyday_id)
         payload = request.json or {}
         day = payload.get("day")
         if not day:
@@ -407,14 +486,15 @@ def create_app(cfg=None) -> Flask:
         if day != date.today().isoformat():
             return jsonify({"ok": False,
                             "error": "only today can be updated"}), 403
-        db.set_everyday_day(get_conn(flask_app), everyday_id, day,
-                            bool(payload.get("done")))
+        db.set_everyday_day(conn, everyday_id, day, bool(payload.get("done")))
         return jsonify({"ok": True})
 
     @flask_app.route("/phase/<int:phase_id>/item", methods=["POST"])
+    @login_required
     def phase_add_item(phase_id):
         payload = request.json or {}
         conn = get_conn(flask_app)
+        _require_phase(conn, phase_id)
         position = len(db.list_items(conn, phase_id))
         iid = db.create_item(conn, phase_id, payload.get("title", "New item"),
                              payload.get("description", ""),
@@ -424,9 +504,11 @@ def create_app(cfg=None) -> Flask:
         return jsonify({"ok": True, "id": iid})
 
     @flask_app.route("/project/<int:project_id>/everyday", methods=["POST"])
+    @login_required
     def project_add_everyday(project_id):
         payload = request.json or {}
         conn = get_conn(flask_app)
+        _require_project(conn, project_id)
         position = len(db.list_everyday_items(conn, project_id))
         eid = db.create_everyday_item(
             conn, project_id, payload.get("title", "New everyday item"),
@@ -435,8 +517,10 @@ def create_app(cfg=None) -> Flask:
         return jsonify({"ok": True, "id": eid})
 
     @flask_app.route("/project/<int:project_id>/phase", methods=["POST"])
+    @login_required
     def project_add_phase(project_id):
         conn = get_conn(flask_app)
+        _require_project(conn, project_id)
         position = len(db.list_phases(conn, project_id))
         pid = db.create_phase(conn, project_id,
                               (request.json or {}).get("name", "New phase"),
@@ -444,21 +528,26 @@ def create_app(cfg=None) -> Flask:
         return jsonify({"ok": True, "id": pid})
 
     @flask_app.route("/project/<int:project_id>/dates", methods=["POST"])
+    @login_required
     def project_dates(project_id):
         db.update_project_dates(get_conn(flask_app), project_id,
                                 request.form.get("start_date") or None,
-                                request.form.get("due_date") or None)
+                                request.form.get("due_date") or None,
+                                current_user_id())
         return redirect(url_for("project", project_id=project_id))
 
     @flask_app.route("/project/<int:project_id>/delete", methods=["POST"])
+    @login_required
     def project_delete(project_id):
-        db.delete_project(get_conn(flask_app), project_id)
+        db.delete_project(get_conn(flask_app), project_id, current_user_id())
         return jsonify({"ok": True})
 
     @flask_app.route("/dashboard")
+    @login_required
     def dashboard():
         conn = get_conn(flask_app)
-        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"])
+        items = _all_dated_items(conn, flask_app.config["DUE_SOON_DAYS"],
+                                 user_id=current_user_id())
         order = {"overdue": 0, "due-soon": 1, "upcoming": 2, "none": 3,
                  "done": 4}
         # Within an urgency bucket, time-sensitive items come first.
@@ -468,10 +557,12 @@ def create_app(cfg=None) -> Flask:
         return render_template("dashboard.html", active="today", items=items)
 
     @flask_app.route("/calendar")
+    @login_required
     def calendar():
         conn = get_conn(flask_app)
         items = [i for i in _all_dated_items(conn,
-                 flask_app.config["DUE_SOON_DAYS"]) if i["resolved_date"]]
+                 flask_app.config["DUE_SOON_DAYS"], user_id=current_user_id())
+                 if i["resolved_date"]]
         by_date = {}
         for i in items:
             by_date.setdefault(i["resolved_date"].isoformat(), []).append(i)
@@ -485,17 +576,21 @@ def create_app(cfg=None) -> Flask:
         return Response(ics.build_ics(events), mimetype="text/calendar")
 
     @flask_app.route("/export.ics")
+    @login_required
     def export_all_ics():
-        return _ics_response(_all_dated_items(conn := get_conn(flask_app),
-                             flask_app.config["DUE_SOON_DAYS"]))
+        conn = get_conn(flask_app)
+        return _ics_response(_all_dated_items(
+            conn, flask_app.config["DUE_SOON_DAYS"], user_id=current_user_id()))
 
     @flask_app.route("/project/<int:project_id>/export.ics")
+    @login_required
     def export_project_ics(project_id):
         conn = get_conn(flask_app)
-        if db.get_project(conn, project_id) is None:
+        uid = current_user_id()
+        if db.get_project(conn, project_id, uid) is None:
             abort(404)
         items = [i for i in _all_dated_items(conn,
-                 flask_app.config["DUE_SOON_DAYS"])
+                 flask_app.config["DUE_SOON_DAYS"], user_id=uid)
                  if i["project_id"] == project_id]
         return _ics_response(items)
 
