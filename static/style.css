@@ -11,10 +11,10 @@
   --text: #ededf2;
   --text-dim: #9a9aa6;
   --text-faint: #66666f;
-  --accent: #8b7bff;          /* readable violet for text/icons */
-  --accent-2: #6d28d9;        /* mid purple */
-  --accent-deep: #2d0086;     /* spec deep purple, for gradients */
-  --accent-soft: rgba(124, 92, 255, 0.14);
+  --accent: #ff5d63;          /* readable red for text/icons */
+  --accent-2: #d31f3c;        /* crimson */
+  --accent-deep: #7a0b1e;     /* deep maroon, for gradients */
+  --accent-soft: rgba(255, 93, 99, 0.13);
   --good: #34d399;
   --warn: #fbbf24;
   --bad: #fb7185;
@@ -45,8 +45,8 @@ body::before {
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(60rem 60rem at 12% -10%, rgba(45, 0, 134, 0.40), transparent 60%),
-    radial-gradient(50rem 50rem at 100% 0%, rgba(109, 40, 217, 0.18), transparent 55%),
+    radial-gradient(60rem 60rem at 12% -10%, rgba(122, 11, 30, 0.45), transparent 60%),
+    radial-gradient(50rem 50rem at 100% 0%, rgba(211, 31, 60, 0.20), transparent 55%),
     linear-gradient(180deg, var(--bg-2), var(--bg));
 }
 body::after {
@@ -159,7 +159,7 @@ body::after {
 .btn-accent {
   color: #fff; border: 0;
   background: linear-gradient(135deg, var(--accent-2), var(--accent-deep));
-  box-shadow: 0 8px 24px -8px rgba(109, 40, 217, 0.8);
+  box-shadow: 0 8px 24px -8px rgba(211, 31, 60, 0.75);
 }
 .btn-accent:hover { filter: brightness(1.12); transform: translateY(-1px); }
 .btn-ghost { background: transparent; border: 1px solid var(--border); }
@@ -177,7 +177,7 @@ body::after {
   padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 600;
   border: 1px solid var(--border); color: var(--text-dim); background: var(--panel);
 }
-.pill-accent { color: #c9bcff; background: var(--accent-soft); border-color: rgba(124,92,255,0.28); }
+.pill-accent { color: #ffb3b6; background: var(--accent-soft); border-color: rgba(255,93,99,0.30); }
 .pill-good { color: #7df0c4; background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.25); }
 .pill-warn { color: #ffd98a; background: rgba(251,191,36,0.12); border-color: rgba(251,191,36,0.25); }
 .pill-bad  { color: #ffb0bd; background: rgba(251,113,133,0.12); border-color: rgba(251,113,133,0.28); }
@@ -200,7 +200,7 @@ body::after {
 .bar > span {
   display: block; height: 100%; border-radius: 99px;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 12px rgba(124,92,255,0.5);
+  box-shadow: 0 0 12px rgba(255,93,99,0.45);
   transition: width 0.9s var(--ease);
 }
 

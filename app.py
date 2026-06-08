@@ -450,6 +450,11 @@ def create_app(cfg=None) -> Flask:
                                 request.form.get("due_date") or None)
         return redirect(url_for("project", project_id=project_id))
 
+    @flask_app.route("/project/<int:project_id>/delete", methods=["POST"])
+    def project_delete(project_id):
+        db.delete_project(get_conn(flask_app), project_id)
+        return jsonify({"ok": True})
+
     @flask_app.route("/dashboard")
     def dashboard():
         conn = get_conn(flask_app)

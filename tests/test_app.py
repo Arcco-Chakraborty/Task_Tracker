@@ -206,3 +206,15 @@ def test_project_page_has_day_grid_and_gcal(tmp_path):
     assert resp.status_code == 200
     assert b"js-everyday-day" in resp.data          # per-day checkbox grid
     assert b"calendar.google.com" in resp.data      # add-to-google-calendar link
+
+
+def test_project_delete(tmp_path):
+    flask_app, client = _client(tmp_path)
+    pid = _seed(flask_app)
+    conn = app_module.get_conn(flask_app)
+    assert db.get_project(conn, pid) is not None
+    r = client.post(f"/project/{pid}/delete")
+    assert r.status_code == 200
+    assert db.get_project(conn, pid) is None
+    # cascade: phases gone too
+    assert db.list_phases(conn, pid) == []

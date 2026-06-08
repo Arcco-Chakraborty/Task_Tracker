@@ -8,7 +8,7 @@
   <script>
     tailwind.config = { darkMode: "class",
       theme: { extend: {
-        colors: { accent: "#8b7bff", accentdeep: "#2d0086" },
+        colors: { accent: "#ff5d63", accentdeep: "#7a0b1e" },
         fontFamily: { sans: ["Geist", "ui-sans-serif", "system-ui"], mono: ["Geist Mono", "ui-monospace"] },
         borderRadius: { xl: "16px", "2xl": "20px" },
       } } };
@@ -21,7 +21,7 @@
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <linearGradient id="ringgrad" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0%" stop-color="#8b7bff"/><stop offset="100%" stop-color="#2d0086"/>
+    <stop offset="0%" stop-color="#ff7a80"/><stop offset="100%" stop-color="#7a0b1e"/>
   </linearGradient>
 </defs></svg>
 {% set active = active|default('') %}
@@ -44,7 +44,7 @@
     <!-- profile -->
     <div class="nav-item" style="cursor:default">
       <span class="grid h-7 w-7 place-items-center rounded-full text-[12px] font-bold text-white shrink-0"
-            style="background:linear-gradient(135deg,#7c5cff,#2d0086)">A</span>
+            style="background:linear-gradient(135deg,#ff5d63,#7a0b1e)">A</span>
       <span class="nav-label">
         <span class="block text-[13px] font-semibold text-[var(--text)] leading-tight">Arcco</span>
         <span class="block text-[11px] faint">Pro workspace</span>
@@ -59,14 +59,15 @@
 
     <!-- nav -->
     <nav class="flex flex-col gap-1 mt-1">
+      {# accurate Lucide icon paths #}
       {% set icon = {
-        'dashboard':'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
-        'today':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-        'planner':'<path d="M4 5h16M4 12h10M4 19h7"/>',
-        'projects':'<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/>',
-        'calendar':'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
-        'analytics':'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
-        'settings':'<circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1L11 21h4l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5z"/>'
+        'dashboard':'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+        'today':'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+        'planner':'<rect width="6" height="6" x="3" y="4" rx="1"/><path d="m3 16 2 2 4-4"/><path d="M12 6h9M12 12h9M12 18h9"/>',
+        'projects':'<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+        'calendar':'<path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
+        'analytics':'<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+        'settings':'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'
       } %}
       {% set nav = [('dashboard','/','Dashboard'),('today','/today','Today'),('planner','/planner','Planner'),('projects','/projects','Projects'),('calendar','/calendar','Calendar'),('analytics','/analytics','Analytics'),('settings','/settings','Settings')] %}
       {% for key, href, label in nav %}
@@ -116,7 +117,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
         </button>
         <span class="grid h-9 w-9 place-items-center rounded-full text-[12px] font-bold text-white"
-              style="background:linear-gradient(135deg,#7c5cff,#2d0086)">A</span>
+              style="background:linear-gradient(135deg,#ff5d63,#7a0b1e)">A</span>
       </div>
     </header>
 

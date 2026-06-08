@@ -51,6 +51,15 @@ document.addEventListener("change", (e) => {
 });
 
 document.addEventListener("click", (e) => {
+  const delProj = e.target.closest(".js-delete-project");
+  if (delProj) {
+    if (confirm("Delete this entire project and all its tasks? This cannot be undone.")) {
+      postJSON(`/project/${delProj.dataset.projectId}/delete`).then(() => {
+        window.location = "/projects";
+      });
+    }
+    return;
+  }
   if (e.target.classList.contains("js-delete")) {
     const li = e.target.closest("[data-item-id]");
     if (confirm("Delete this item?")) {
