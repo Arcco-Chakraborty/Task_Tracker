@@ -160,3 +160,36 @@ def test_export_ics(tmp_path):
     assert resp.status_code == 200
     assert b"BEGIN:VCALENDAR" in resp.data
     assert resp.mimetype == "text/calendar"
+
+
+def test_everyday_day_toggle(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    pid = db.create_project(conn, "P", "", "text", "x")
+    eid = db.create_everyday_item(conn, pid, "Standup", position=0)
+    r = client.post(f"/everyday/{eid}/day", json={"day": "2026-06-08", "done": True})
+    assert r.status_code == 200
+    assert (eid, "2026-06-08") in db.list_everyday_completions(conn, pid, "2026-06-01")
+    client.post(f"/everyday/{eid}/day", json={"day": "2026-06-08", "done": False})
+    assert (eid, "2026-06-08") not in db.list_everyday_completions(conn, pid, "2026-06-01")
+
+
+def test_everyday_day_requires_day(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    pid = db.create_project(conn, "P", "", "text", "x")
+    eid = db.create_everyday_item(conn, pid, "Standup", position=0)
+    assert client.post(f"/everyday/{eid}/day", json={"done": True}).status_code == 400
+
+
+def test_project_page_has_day_grid_and_gcal(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    pid = db.create_project(conn, "P", "summary", "text", "x", start_date="2026-06-01")
+    db.create_everyday_item(conn, pid, "Standup", position=0)
+    ph = db.create_phase(conn, pid, "Phase", 0)
+    db.create_item(conn, ph, "Task", "", deadline="2026-06-20", position=0)
+    resp = client.get(f"/project/{pid}")
+    assert resp.status_code == 200
+    assert b"js-everyday-day" in resp.data          # per-day checkbox grid
+    assert b"calendar.google.com" in resp.data      # add-to-google-calendar link

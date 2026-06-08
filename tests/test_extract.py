@@ -89,3 +89,14 @@ def test_normalize_preserves_info_everyday_and_resources():
     item_resources = out["phases"][0]["items"][0]["resources"]
     assert item_resources == [{
         "title": "Checklist", "url": None, "note": "Release steps"}]
+
+
+def test_normalize_clamps_weight():
+    raw = {"phases": [{"name": "P", "items": [
+        {"title": "a", "weight": 9},
+        {"title": "b", "weight": 0},
+        {"title": "c"},
+        {"title": "d", "weight": "4"},
+    ]}]}
+    items = extract.normalize_extraction(raw)["phases"][0]["items"]
+    assert [i["weight"] for i in items] == [5, 1, 3, 4]

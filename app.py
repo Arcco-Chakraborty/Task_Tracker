@@ -1,7 +1,7 @@
 """app.py — Flask app for the task tracker."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from flask import (Flask, abort, g, has_app_context, jsonify, redirect,
                    render_template, request, url_for, Response)
@@ -67,16 +67,42 @@ def _project_view(conn, project, due_soon_days, today=None):
             })
         view_phases.append({**phase, "items": rows,
                             "progress": schedule.progress(items)})
-    everyday = db.list_everyday_items(conn, project["id"])
+    everyday_rows, everyday_today = _everyday_view(conn, project["id"], today)
     return {
         "project": project,
         "phases": view_phases,
         "progress": schedule.progress(all_items),
         "info_cards": db.list_info_cards(conn, project["id"]),
-        "everyday_items": everyday,
-        "everyday_progress": schedule.progress(everyday),
+        "everyday_items": everyday_rows,
+        "everyday_today": everyday_today,
         "resources": db.list_project_resources(conn, project["id"]),
     }
+
+
+def _everyday_view(conn, project_id, today, days_back=7):
+    """Attach a per-day completion grid (last `days_back` days, oldest->today)
+    to each everyday item, and compute today's completion summary."""
+    window = [today - timedelta(days=n) for n in range(days_back - 1, -1, -1)]
+    today_iso = today.isoformat()
+    completed = db.list_everyday_completions(conn, project_id,
+                                             window[0].isoformat())
+    rows = []
+    done_today = 0
+    for item in db.list_everyday_items(conn, project_id):
+        grid = [{
+            "date": d.isoformat(),
+            "label": d.strftime("%a"),
+            "dom": d.day,
+            "done": (item["id"], d.isoformat()) in completed,
+            "is_today": d == today,
+        } for d in window]
+        if (item["id"], today_iso) in completed:
+            done_today += 1
+        rows.append({**item, "days": grid})
+    total = len(rows)
+    today_summary = {"done": done_today, "total": total,
+                     "percent": round(done_today / total * 100) if total else 0}
+    return rows, today_summary
 
 
 def _all_dated_items(conn, due_soon_days, today=None):
@@ -111,6 +137,8 @@ def create_app(cfg=None) -> Flask:
     flask_app.config["CFG"] = cfg
     flask_app.config["DUE_SOON_DAYS"] = cfg.get("tracking", {}).get(
         "due_soon_days", 3)
+    # Expose the Google Calendar link builder to templates.
+    flask_app.jinja_env.globals["gcal_link"] = ics.gcal_link
 
     # Create the schema once at startup (separate short-lived connection).
     init_conn = db.connect(db_path)
@@ -238,6 +266,16 @@ def create_app(cfg=None) -> Flask:
     @flask_app.route("/everyday/<int:everyday_id>/delete", methods=["POST"])
     def everyday_delete(everyday_id):
         db.delete_everyday_item(get_conn(flask_app), everyday_id)
+        return jsonify({"ok": True})
+
+    @flask_app.route("/everyday/<int:everyday_id>/day", methods=["POST"])
+    def everyday_day(everyday_id):
+        payload = request.json or {}
+        day = payload.get("day")
+        if not day:
+            return jsonify({"ok": False, "error": "missing day"}), 400
+        db.set_everyday_day(get_conn(flask_app), everyday_id, day,
+                            bool(payload.get("done")))
         return jsonify({"ok": True})
 
     @flask_app.route("/phase/<int:phase_id>/item", methods=["POST"])

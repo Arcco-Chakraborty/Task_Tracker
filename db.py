@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS items (
     status        TEXT NOT NULL DEFAULT 'todo',
     deadline      TEXT,
     duration_days INTEGER,
+    weight        INTEGER NOT NULL DEFAULT 3,
     position      INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
@@ -60,6 +61,12 @@ CREATE TABLE IF NOT EXISTS resources (
     note        TEXT NOT NULL DEFAULT '',
     position    INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS everyday_completions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    everyday_id INTEGER NOT NULL REFERENCES everyday_items(id) ON DELETE CASCADE,
+    day         TEXT NOT NULL,
+    UNIQUE(everyday_id, day)
+);
 """
 
 
@@ -72,6 +79,11 @@ def connect(db_path: str) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # Migrate older DBs created before the items.weight column existed.
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(items)").fetchall()]
+    if "weight" not in cols:
+        conn.execute(
+            "ALTER TABLE items ADD COLUMN weight INTEGER NOT NULL DEFAULT 3")
     conn.commit()
 
 
@@ -140,11 +152,12 @@ def delete_phase(conn, phase_id) -> None:
 # --- items -----------------------------------------------------------------
 
 def create_item(conn, phase_id, title, description="", deadline=None,
-                duration_days=None, position=0, status="todo") -> int:
+                duration_days=None, position=0, status="todo", weight=3) -> int:
     cur = conn.execute(
         "INSERT INTO items (phase_id, title, description, status, deadline, "
-        "duration_days, position) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (phase_id, title, description, status, deadline, duration_days, position),
+        "duration_days, weight, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (phase_id, title, description, status, deadline, duration_days,
+         weight, position),
     )
     conn.commit()
     return cur.lastrowid
@@ -169,7 +182,7 @@ def list_all_items(conn) -> list[dict]:
 
 
 _ITEM_FIELDS = {"title", "description", "status", "deadline",
-                "duration_days", "position"}
+                "duration_days", "weight", "position"}
 
 
 def update_item(conn, item_id, **fields) -> None:
@@ -250,6 +263,30 @@ def delete_everyday_item(conn, everyday_id) -> None:
     conn.commit()
 
 
+def set_everyday_day(conn, everyday_id, day, done) -> None:
+    """Record or clear a per-day completion for an everyday item."""
+    if done:
+        conn.execute(
+            "INSERT OR IGNORE INTO everyday_completions (everyday_id, day) "
+            "VALUES (?, ?)", (everyday_id, day))
+    else:
+        conn.execute(
+            "DELETE FROM everyday_completions WHERE everyday_id = ? AND day = ?",
+            (everyday_id, day))
+    conn.commit()
+
+
+def list_everyday_completions(conn, project_id, since_day) -> set:
+    """Return {(everyday_id, day)} completions for a project's everyday items
+    on or after since_day (inclusive)."""
+    rows = conn.execute(
+        "SELECT c.everyday_id AS eid, c.day AS day FROM everyday_completions c "
+        "JOIN everyday_items e ON c.everyday_id = e.id "
+        "WHERE e.project_id = ? AND c.day >= ?",
+        (project_id, since_day)).fetchall()
+    return {(r["eid"], r["day"]) for r in rows}
+
+
 # --- resources -------------------------------------------------------------
 
 def create_resource(conn, project_id, title, url=None, note="", item_id=None,
@@ -313,6 +350,7 @@ def create_project_from_extraction(conn, extraction, source_type, source_name,
                 item.get("description") or "",
                 deadline=item.get("deadline"),
                 duration_days=item.get("duration_days"),
+                weight=item.get("weight", 3),
                 position=i_pos,
             )
             key = (item.get("title") or "").strip().lower()

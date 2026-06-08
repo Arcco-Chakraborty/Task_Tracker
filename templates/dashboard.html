@@ -9,6 +9,7 @@
     <a href="/project/{{ i.project_id }}" class="text-blue-700 hover:underline">{{ i.project_title }}</a>
     <span class="{% if i.status == 'done' %}line-through text-slate-400{% endif %}">{{ i.title }}</span>
     <span class="ml-auto text-sm text-slate-500">{{ i.resolved_date or '—' }}</span>
+    {% if i.resolved_date %}<a class="text-xs text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" href="{{ gcal_link(i.project_title ~ ': ' ~ i.title, i.resolved_date) }}" title="Add to Google Calendar">+GCal</a>{% endif %}
   </li>
   {% endfor %}
 </ul>

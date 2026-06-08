@@ -6,8 +6,11 @@ recommended timelines, progress, a due-soon dashboard, calendar, and `.ics`
 export.
 
 The project detail page also preserves extracted context as info cards,
-separates recurring/background work into an Everyday checklist, and collects
-resources both on related task cards and in a Resources section.
+separates recurring/background work into an Everyday checklist with a per-day
+(habit-tracker) grid, and collects resources both on related task cards and in
+a Resources section. Main progress is WEIGHTED by each task's LLM-assigned
+seriousness (1-5), and every dated task has a one-click "Add to Google
+Calendar" link (plus `.ics` export for bulk import).
 
 ## Setup
 
@@ -32,6 +35,7 @@ Edit `config.yaml`: model, temperature, input truncation, and the
 Besides `title`, `summary`, `suggested_start`, `suggested_due`, and `phases`,
 the normalized extraction may include:
 
+- item `weight`: integer 1-5 seriousness (drives weighted progress).
 - `info_cards`: important facts, constraints, names, decisions, or context.
 - `everyday_items`: recurring/background checklist work with optional cadence.
 - `resources`: project-level or task-linked links/references.

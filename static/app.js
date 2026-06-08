@@ -40,6 +40,14 @@ document.addEventListener("change", (e) => {
       window.location.reload()
     );
   }
+  if (e.target.classList.contains("js-everyday-day")) {
+    const cb = e.target;
+    // Persist the per-day completion; no reload so the grid stays put.
+    postJSON(`/everyday/${cb.dataset.everydayId}/day`, {
+      day: cb.dataset.day,
+      done: cb.checked,
+    });
+  }
 });
 
 document.addEventListener("click", (e) => {

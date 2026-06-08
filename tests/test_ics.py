@@ -25,3 +25,15 @@ def test_build_ics_escapes_commas():
         {"uid": "1", "summary": "a, b; c", "date": date(2026, 1, 2)},
     ])
     assert "SUMMARY:a\\, b\\; c" in out
+
+
+def test_gcal_link_builds_url():
+    url = ics.gcal_link("Proj: Task", date(2026, 6, 20), "do it")
+    assert url.startswith("https://calendar.google.com/calendar/render?action=TEMPLATE")
+    assert "dates=20260620/20260621" in url
+    assert "text=Proj%3A%20Task" in url
+    assert "details=do%20it" in url
+
+
+def test_gcal_link_none_when_no_date():
+    assert ics.gcal_link("x", None) is None

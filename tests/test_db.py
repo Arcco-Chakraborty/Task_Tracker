@@ -114,3 +114,58 @@ def test_everyday_status_update():
     eid = db.create_everyday_item(conn, pid, "Review", cadence="daily")
     db.set_everyday_status(conn, eid, "done")
     assert db.list_everyday_items(conn, pid)[0]["status"] == "done"
+
+
+def test_item_weight_persists():
+    conn = _conn()
+    pid = db.create_project(conn, "A", "", "text", "x")
+    ph = db.create_phase(conn, pid, "P", 0)
+    it = db.create_item(conn, ph, "I", "", weight=5, position=0)
+    assert db.list_items(conn, ph)[0]["weight"] == 5
+    db.update_item(conn, it, weight=2)
+    assert db.list_items(conn, ph)[0]["weight"] == 2
+
+
+def test_item_weight_defaults_to_three():
+    conn = _conn()
+    pid = db.create_project(conn, "A", "", "text", "x")
+    ph = db.create_phase(conn, pid, "P", 0)
+    db.create_item(conn, ph, "I", "", position=0)
+    assert db.list_items(conn, ph)[0]["weight"] == 3
+
+
+def test_weight_migration_adds_column(tmp_path):
+    # simulate an older DB whose items table lacks the weight column
+    import sqlite3
+    p = str(tmp_path / "old.db")
+    raw = sqlite3.connect(p)
+    raw.executescript(
+        "CREATE TABLE projects (id INTEGER PRIMARY KEY, title TEXT, summary TEXT,"
+        " source_type TEXT, source_name TEXT, start_date TEXT, due_date TEXT,"
+        " created_at TEXT, updated_at TEXT);"
+        "CREATE TABLE phases (id INTEGER PRIMARY KEY, project_id INTEGER,"
+        " name TEXT, position INTEGER);"
+        "CREATE TABLE items (id INTEGER PRIMARY KEY, phase_id INTEGER, title TEXT,"
+        " description TEXT, status TEXT, deadline TEXT, duration_days INTEGER,"
+        " position INTEGER, created_at TEXT, updated_at TEXT);")
+    raw.commit(); raw.close()
+    conn = db.connect(p)
+    db.init_db(conn)  # should add items.weight without error
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(items)").fetchall()]
+    assert "weight" in cols
+
+
+def test_everyday_per_day_completions():
+    conn = _conn()
+    pid = db.create_project(conn, "A", "", "text", "x")
+    eid = db.create_everyday_item(conn, pid, "Water plants", position=0)
+    db.set_everyday_day(conn, eid, "2026-06-07", True)
+    db.set_everyday_day(conn, eid, "2026-06-08", True)
+    comp = db.list_everyday_completions(conn, pid, "2026-06-06")
+    assert (eid, "2026-06-07") in comp and (eid, "2026-06-08") in comp
+    # clearing removes it
+    db.set_everyday_day(conn, eid, "2026-06-07", False)
+    comp = db.list_everyday_completions(conn, pid, "2026-06-06")
+    assert (eid, "2026-06-07") not in comp
+    # since_day filter excludes older days
+    assert db.list_everyday_completions(conn, pid, "2026-06-08") == {(eid, "2026-06-08")}

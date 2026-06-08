@@ -59,3 +59,19 @@ def test_urgency_upcoming():
 
 def test_urgency_none_when_no_date():
     assert schedule.urgency(None, "todo", date(2026, 6, 5), 3) == "none"
+
+
+def test_progress_weighted_by_seriousness():
+    # one heavy done task outweighs two light todo tasks
+    items = [
+        {"status": "done", "weight": 5},
+        {"status": "todo", "weight": 1},
+        {"status": "todo", "weight": 1},
+    ]
+    p = schedule.progress(items)
+    assert p == {"total": 3, "done": 1, "percent": 71}  # 5 / 7
+
+
+def test_progress_missing_weight_defaults_to_one():
+    items = [{"status": "done"}, {"status": "todo"}]
+    assert schedule.progress(items)["percent"] == 50

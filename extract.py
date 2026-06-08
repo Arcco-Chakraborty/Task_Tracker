@@ -16,6 +16,8 @@ states or clearly implies one.
 - Otherwise estimate "duration_days" (an integer) for a recommended timeline, \
 and set "deadline" to null. Do not invent calendar dates.
 - If you know neither, set both to null.
+- Set "weight" to an integer 1-5 for how serious/important each item is \
+(5 = critical/high-stakes, 3 = normal, 1 = trivial). Default to 3 if unsure.
 - Put recurring/background/everyday work in "everyday_items", not in phases.
 - Preserve names, constraints, decisions, deliverables, tools, links, files, \
 contacts, references, and other specifics in "info_cards" and "resources".
@@ -36,6 +38,7 @@ Respond with raw JSON only (no markdown, no code fences) in EXACTLY this shape:
     {{"name": "string", "items": [
       {{"title": "string", "description": "string",
         "deadline": "YYYY-MM-DD or null", "duration_days": integer or null,
+        "weight": integer 1-5,
         "resources": [
           {{"title": "string", "url": "string or null", "note": "string"}}
         ]}}
@@ -91,6 +94,15 @@ def _coerce_int(value):
 
 def _norm_date(value):
     return value if parse_date(value) is not None else None
+
+
+def _coerce_weight(value, default=3):
+    """Clamp the model's seriousness weight into 1..5 (default 3)."""
+    try:
+        w = int(value)
+    except (ValueError, TypeError):
+        return default
+    return min(5, max(1, w))
 
 
 def _clean_text(value, fallback=""):
@@ -152,6 +164,7 @@ def normalize_extraction(raw: dict) -> dict:
                 "description": (item.get("description") or "").strip(),
                 "deadline": _norm_date(item.get("deadline")),
                 "duration_days": _coerce_int(item.get("duration_days")),
+                "weight": _coerce_weight(item.get("weight")),
                 "resources": resources,
             })
         phases_out.append({

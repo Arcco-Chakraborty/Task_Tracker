@@ -1,5 +1,24 @@
-"""ics.py — build a minimal RFC 5545 iCalendar string from dated events."""
+"""ics.py — build a minimal RFC 5545 iCalendar string from dated events,
+plus one-click "Add to Google Calendar" links."""
 from __future__ import annotations
+
+from datetime import timedelta
+from urllib.parse import quote
+
+
+def gcal_link(summary, d, details=""):
+    """Return a Google Calendar 'add event' URL for an all-day event on date d
+    (the end date is exclusive, so a single all-day event). Returns None when
+    there is no date."""
+    if d is None:
+        return None
+    start = d.strftime("%Y%m%d")
+    end = (d + timedelta(days=1)).strftime("%Y%m%d")
+    url = ("https://calendar.google.com/calendar/render?action=TEMPLATE"
+           f"&text={quote(str(summary))}&dates={start}/{end}")
+    if details:
+        url += f"&details={quote(str(details))}"
+    return url
 
 
 def _escape(text: str) -> str:

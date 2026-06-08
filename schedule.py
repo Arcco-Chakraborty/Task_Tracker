@@ -42,11 +42,24 @@ def resolve_item_dates(start_date, items) -> list:
     return out
 
 
+def _weight(item) -> int:
+    """An item's seriousness weight (>=1). Missing/invalid weights count as 1."""
+    try:
+        w = int(item.get("weight") or 1)
+    except (ValueError, TypeError):
+        w = 1
+    return w if w > 0 else 1
+
+
 def progress(items) -> dict:
-    """Return {total, done, percent} from a list of items with a 'status'."""
+    """Return {total, done, percent} where percent is WEIGHTED by each item's
+    seriousness ('weight'). With uniform/absent weights this matches a plain
+    completed-count ratio."""
     total = len(items)
     done = sum(1 for i in items if i.get("status") == "done")
-    percent = round(done / total * 100) if total else 0
+    total_w = sum(_weight(i) for i in items)
+    done_w = sum(_weight(i) for i in items if i.get("status") == "done")
+    percent = round(done_w / total_w * 100) if total_w else 0
     return {"total": total, "done": done, "percent": percent}
 
 
