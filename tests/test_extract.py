@@ -32,6 +32,9 @@ def test_normalize_defaults_title_and_phases():
     assert out["title"] == "Untitled"
     assert out["phases"] == []
     assert out["suggested_start"] is None
+    assert out["info_cards"] == []
+    assert out["everyday_items"] == []
+    assert out["resources"] == []
 
 
 def test_normalize_validates_suggested_dates():
@@ -59,3 +62,30 @@ def test_extract_project_uses_backend():
                                   max_input_chars=1000)
     assert out["title"] == "T"
     assert out["phases"][0]["items"][0]["title"] == "i"
+
+
+def test_normalize_preserves_info_everyday_and_resources():
+    raw = {
+        "info_cards": [{"title": "Constraint", "body": "Use portal A"}],
+        "everyday_items": [
+            {"title": "Check blocker channel", "description": "AM sweep",
+             "cadence": "daily"},
+        ],
+        "resources": [
+            {"title": "Runbook", "url": "https://example.test",
+             "note": "Ops notes", "related_item_title": "Deploy"},
+        ],
+        "phases": [{"name": "Ship", "items": [
+            {"title": "Deploy", "resources": [
+                {"title": "Checklist", "note": "Release steps"},
+                "bad shape",
+            ]},
+        ]}],
+    }
+    out = extract.normalize_extraction(raw)
+    assert out["info_cards"][0]["body"] == "Use portal A"
+    assert out["everyday_items"][0]["cadence"] == "daily"
+    assert out["resources"][0]["related_item_title"] == "Deploy"
+    item_resources = out["phases"][0]["items"][0]["resources"]
+    assert item_resources == [{
+        "title": "Checklist", "url": None, "note": "Release steps"}]

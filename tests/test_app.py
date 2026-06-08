@@ -47,9 +47,15 @@ def test_upload_text_creates_project(tmp_path, monkeypatch):
     def fake_extract_project(text, backend, **kw):
         return {"title": "Generated", "summary": "s",
                 "suggested_start": None, "suggested_due": None,
+                "info_cards": [{"title": "Constraint", "body": "Keep this"}],
+                "everyday_items": [{"title": "Daily review",
+                                    "description": "", "cadence": "daily"}],
+                "resources": [{"title": "Portal", "url": None,
+                               "note": "Use for uploads",
+                               "related_item_title": "task a"}],
                 "phases": [{"name": "P", "items": [
                     {"title": "task a", "description": "", "deadline": None,
-                     "duration_days": 1}]}]}
+                     "duration_days": 1, "resources": []}]}]}
 
     monkeypatch.setattr(app_module.extract, "extract_project",
                         fake_extract_project)
@@ -59,6 +65,23 @@ def test_upload_text_creates_project(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert b"Generated" in resp.data
     assert b"task a" in resp.data
+    assert b"Constraint" in resp.data
+    assert b"Daily review" in resp.data
+    assert b"Portal" in resp.data
+
+
+def test_upload_llm_error_stays_on_upload_page(tmp_path, monkeypatch):
+    flask_app, client = _client(tmp_path)
+
+    def fail_extract_project(text, backend, **kw):
+        raise app_module.llm.LLMError("quota")
+
+    monkeypatch.setattr(app_module.extract, "extract_project",
+                        fail_extract_project)
+    monkeypatch.setattr(app_module.llm, "get_backend", lambda cfg: object())
+    resp = client.post("/upload", data={"text": "do some work"})
+    assert resp.status_code == 502
+    assert b"AI extraction failed: quota" in resp.data
 
 
 def test_toggle_status(tmp_path):
@@ -81,6 +104,21 @@ def test_add_item(tmp_path):
                 json={"title": "new one", "description": ""})
     titles = [i["title"] for i in db.list_items(conn, ph["id"])]
     assert "new one" in titles
+
+
+def test_everyday_status_and_add(tmp_path):
+    flask_app, client = _client(tmp_path)
+    pid = _seed(flask_app)
+    conn = app_module.get_conn(flask_app)
+    resp = client.post(f"/project/{pid}/everyday",
+                       json={"title": "review inbox", "cadence": "daily"})
+    assert resp.status_code == 200
+    everyday = db.list_everyday_items(conn, pid)
+    assert everyday[0]["title"] == "review inbox"
+    resp = client.post(f"/everyday/{everyday[0]['id']}/status",
+                       json={"status": "done"})
+    assert resp.status_code == 200
+    assert db.list_everyday_items(conn, pid)[0]["status"] == "done"
 
 
 def test_delete_item(tmp_path):

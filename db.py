@@ -33,6 +33,33 @@ CREATE TABLE IF NOT EXISTS items (
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS info_cards (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL DEFAULT '',
+    position    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS everyday_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    cadence     TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'todo',
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS resources (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    item_id     INTEGER REFERENCES items(id) ON DELETE SET NULL,
+    title       TEXT NOT NULL,
+    url         TEXT,
+    note        TEXT NOT NULL DEFAULT '',
+    position    INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -167,6 +194,95 @@ def delete_item(conn, item_id) -> None:
     conn.commit()
 
 
+# --- info cards ------------------------------------------------------------
+
+def create_info_card(conn, project_id, title, body="", position=0) -> int:
+    cur = conn.execute(
+        "INSERT INTO info_cards (project_id, title, body, position) "
+        "VALUES (?, ?, ?, ?)",
+        (project_id, title, body, position),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_info_cards(conn, project_id) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM info_cards WHERE project_id = ? ORDER BY position, id",
+        (project_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# --- everyday checklist ----------------------------------------------------
+
+def create_everyday_item(conn, project_id, title, description="", cadence="",
+                         position=0, status="todo") -> int:
+    cur = conn.execute(
+        "INSERT INTO everyday_items (project_id, title, description, cadence, "
+        "status, position) VALUES (?, ?, ?, ?, ?, ?)",
+        (project_id, title, description, cadence, status, position),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_everyday_items(conn, project_id) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM everyday_items WHERE project_id = ? "
+        "ORDER BY position, id",
+        (project_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_everyday_status(conn, everyday_id, status) -> None:
+    conn.execute(
+        "UPDATE everyday_items SET status = ?, updated_at = datetime('now') "
+        "WHERE id = ?",
+        (status, everyday_id),
+    )
+    conn.commit()
+
+
+def delete_everyday_item(conn, everyday_id) -> None:
+    conn.execute("DELETE FROM everyday_items WHERE id = ?", (everyday_id,))
+    conn.commit()
+
+
+# --- resources -------------------------------------------------------------
+
+def create_resource(conn, project_id, title, url=None, note="", item_id=None,
+                    position=0) -> int:
+    cur = conn.execute(
+        "INSERT INTO resources (project_id, item_id, title, url, note, "
+        "position) VALUES (?, ?, ?, ?, ?, ?)",
+        (project_id, item_id, title, url, note, position),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_project_resources(conn, project_id) -> list[dict]:
+    rows = conn.execute(
+        "SELECT resources.*, items.title AS item_title "
+        "FROM resources "
+        "LEFT JOIN items ON resources.item_id = items.id "
+        "WHERE resources.project_id = ? "
+        "ORDER BY resources.position, resources.id",
+        (project_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_item_resources(conn, item_id) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM resources WHERE item_id = ? ORDER BY position, id",
+        (item_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # --- composite -------------------------------------------------------------
 
 def create_project_from_extraction(conn, extraction, source_type, source_name,
@@ -181,10 +297,17 @@ def create_project_from_extraction(conn, extraction, source_type, source_name,
         start_date or extraction.get("suggested_start"),
         due_date or extraction.get("suggested_due"),
     )
+    for c_pos, card in enumerate(extraction.get("info_cards", [])):
+        create_info_card(
+            conn, pid, card.get("title") or "Important info",
+            card.get("body") or "", c_pos)
+
+    item_ids_by_title = {}
+    resource_pos = 0
     for p_pos, phase in enumerate(extraction.get("phases", [])):
         ph = create_phase(conn, pid, phase.get("name") or "Phase", p_pos)
         for i_pos, item in enumerate(phase.get("items", [])):
-            create_item(
+            item_id = create_item(
                 conn, ph,
                 item.get("title") or "Item",
                 item.get("description") or "",
@@ -192,4 +315,26 @@ def create_project_from_extraction(conn, extraction, source_type, source_name,
                 duration_days=item.get("duration_days"),
                 position=i_pos,
             )
+            key = (item.get("title") or "").strip().lower()
+            if key:
+                item_ids_by_title.setdefault(key, item_id)
+            for res in item.get("resources", []):
+                create_resource(
+                    conn, pid, res.get("title") or "Resource",
+                    url=res.get("url"), note=res.get("note") or "",
+                    item_id=item_id, position=resource_pos)
+                resource_pos += 1
+
+    for e_pos, item in enumerate(extraction.get("everyday_items", [])):
+        create_everyday_item(
+            conn, pid, item.get("title") or "Everyday item",
+            item.get("description") or "", item.get("cadence") or "", e_pos)
+
+    for res in extraction.get("resources", []):
+        related = (res.get("related_item_title") or "").strip().lower()
+        create_resource(
+            conn, pid, res.get("title") or "Resource",
+            url=res.get("url"), note=res.get("note") or "",
+            item_id=item_ids_by_title.get(related), position=resource_pos)
+        resource_pos += 1
     return pid

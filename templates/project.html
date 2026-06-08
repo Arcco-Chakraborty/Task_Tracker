@@ -2,46 +2,133 @@
 {% block title %}{{ project.title }}{% endblock %}
 {% block body %}
 {% set badge = {"overdue":"bg-red-100 text-red-700","due-soon":"bg-amber-100 text-amber-700","upcoming":"bg-slate-100 text-slate-600","done":"bg-green-100 text-green-700","none":"bg-slate-100 text-slate-400"} %}
-<div class="flex items-center justify-between">
-  <h1 class="text-2xl font-bold">{{ project.title }}</h1>
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-bold">{{ project.title }}</h1>
+    {% if project.summary %}<p class="text-slate-500">{{ project.summary }}</p>{% endif %}
+  </div>
   <a class="text-sm text-blue-600 underline" href="/project/{{ project.id }}/export.ics">Export .ics</a>
 </div>
-<p class="text-slate-500">{{ project.summary }}</p>
 
-<form method="post" action="/project/{{ project.id }}/dates" class="mt-3 flex gap-3 items-end text-sm">
+<nav class="mt-5 flex flex-wrap gap-2 border-b border-slate-200 pb-2 text-sm">
+  <a class="rounded bg-slate-900 px-3 py-1 text-white" href="#plan">Plan</a>
+  <a class="rounded bg-white px-3 py-1 text-slate-700 shadow-sm" href="#everyday">Everyday</a>
+  <a class="rounded bg-white px-3 py-1 text-slate-700 shadow-sm" href="#resources">Resources</a>
+</nav>
+
+<form method="post" action="/project/{{ project.id }}/dates" class="mt-4 flex flex-wrap gap-3 items-end text-sm">
   <label>Start <input type="date" name="start_date" value="{{ project.start_date or '' }}" class="border rounded px-2 py-1"></label>
   <label>Due <input type="date" name="due_date" value="{{ project.due_date or '' }}" class="border rounded px-2 py-1"></label>
   <button class="bg-slate-800 text-white px-3 py-1 rounded">Save dates</button>
 </form>
 
-<div class="mt-2 h-2 bg-slate-200 rounded">
-  <div class="h-2 bg-green-500 rounded" style="width: {{ progress.percent }}%"></div>
-</div>
-<p class="text-xs text-slate-500 mt-1">{{ progress.done }}/{{ progress.total }} done ({{ progress.percent }}%)</p>
+<section class="mt-5 grid gap-3 md:grid-cols-2">
+  <article class="bg-white rounded shadow p-4">
+    <h2 class="text-sm font-semibold uppercase text-slate-500">Main progress</h2>
+    <div class="mt-2 h-2 bg-slate-200 rounded">
+      <div class="h-2 bg-green-500 rounded" style="width: {{ progress.percent }}%"></div>
+    </div>
+    <p class="text-xs text-slate-500 mt-1">{{ progress.done }}/{{ progress.total }} done ({{ progress.percent }}%)</p>
+  </article>
+  <article class="bg-white rounded shadow p-4">
+    <h2 class="text-sm font-semibold uppercase text-slate-500">Everyday progress</h2>
+    <div class="mt-2 h-2 bg-slate-200 rounded">
+      <div class="h-2 bg-sky-500 rounded" style="width: {{ everyday_progress.percent }}%"></div>
+    </div>
+    <p class="text-xs text-slate-500 mt-1">{{ everyday_progress.done }}/{{ everyday_progress.total }} done ({{ everyday_progress.percent }}%)</p>
+  </article>
+  {% for card in info_cards %}
+  <article class="bg-white rounded shadow p-4">
+    <h2 class="font-semibold text-slate-800">{{ card.title }}</h2>
+    {% if card.body %}<p class="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{{ card.body }}</p>{% endif %}
+  </article>
+  {% endfor %}
+</section>
 
-{% for phase in phases %}
-<section class="mt-6">
+<section id="plan" class="mt-8">
   <div class="flex items-center justify-between">
-    <h2 class="text-lg font-semibold">{{ phase.name }}</h2>
-    <span class="text-xs text-slate-500">{{ phase.progress.done }}/{{ phase.progress.total }}</span>
+    <h2 class="text-xl font-bold">Plan</h2>
+    <button class="js-add-phase text-sm text-blue-600" data-project-id="{{ project.id }}">+ Add phase</button>
   </div>
+
+  {% for phase in phases %}
+  <section class="mt-5">
+    <div class="flex items-center justify-between">
+      <h3 class="text-lg font-semibold">{{ phase.name }}</h3>
+      <span class="text-xs text-slate-500">{{ phase.progress.done }}/{{ phase.progress.total }}</span>
+    </div>
+    <ul class="mt-2 space-y-2">
+      {% for item in phase["items"] %}
+      <li class="bg-white rounded shadow p-3" data-item-id="{{ item.id }}">
+        <div class="flex items-start gap-3">
+          <input type="checkbox" class="mt-1 js-status" {% if item.status == 'done' %}checked{% endif %}>
+          <div class="min-w-0 flex-1">
+            <p class="font-medium {% if item.status == 'done' %}line-through text-slate-400{% endif %}">{{ item.title }}</p>
+            {% if item.description %}<p class="text-sm text-slate-500 whitespace-pre-wrap">{{ item.description }}</p>{% endif %}
+          </div>
+          <span class="shrink-0 text-xs px-2 py-1 rounded {{ badge[item.urgency] }}">
+            {% if item.resolved_date %}{{ item.resolved_date }}{% elif item.duration_days %}~{{ item.duration_days }}d{% else %}-{% endif %}
+          </span>
+          <button class="js-delete shrink-0 text-slate-400 hover:text-red-600 text-sm">x</button>
+        </div>
+        {% if item.resources %}
+        <div class="mt-3 flex flex-wrap gap-2 pl-8">
+          {% for r in item.resources %}
+            {% if r.url %}
+            <a class="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:underline" href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}{% if r.note %}: {{ r.note }}{% endif %}</a>
+            {% else %}
+            <span class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{{ r.title }}{% if r.note %}: {{ r.note }}{% endif %}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <button class="js-add-item text-sm text-blue-600 mt-2" data-phase-id="{{ phase.id }}">+ Add item</button>
+  </section>
+  {% endfor %}
+</section>
+
+<section id="everyday" class="mt-8">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-bold">Everyday</h2>
+    <button class="js-add-everyday text-sm text-blue-600" data-project-id="{{ project.id }}">+ Add everyday item</button>
+  </div>
+  {% if not everyday_items %}
+  <p class="mt-2 text-sm text-slate-500">No everyday items yet.</p>
+  {% endif %}
   <ul class="mt-2 space-y-2">
-    {% for item in phase["items"] %}
-    <li class="bg-white rounded shadow p-3 flex items-start gap-3" data-item-id="{{ item.id }}">
-      <input type="checkbox" class="mt-1 js-status" {% if item.status == 'done' %}checked{% endif %}>
-      <div class="flex-1">
+    {% for item in everyday_items %}
+    <li class="bg-white rounded shadow p-3 flex items-start gap-3" data-everyday-id="{{ item.id }}">
+      <input type="checkbox" class="mt-1 js-everyday-status" {% if item.status == 'done' %}checked{% endif %}>
+      <div class="min-w-0 flex-1">
         <p class="font-medium {% if item.status == 'done' %}line-through text-slate-400{% endif %}">{{ item.title }}</p>
-        {% if item.description %}<p class="text-sm text-slate-500">{{ item.description }}</p>{% endif %}
+        {% if item.description %}<p class="text-sm text-slate-500 whitespace-pre-wrap">{{ item.description }}</p>{% endif %}
       </div>
-      <span class="text-xs px-2 py-1 rounded {{ badge[item.urgency] }}">
-        {% if item.resolved_date %}{{ item.resolved_date }}{% elif item.duration_days %}~{{ item.duration_days }}d{% else %}—{% endif %}
-      </span>
-      <button class="js-delete text-slate-400 hover:text-red-600 text-sm">✕</button>
+      {% if item.cadence %}<span class="shrink-0 rounded bg-sky-50 px-2 py-1 text-xs text-sky-700">{{ item.cadence }}</span>{% endif %}
+      <button class="js-delete-everyday shrink-0 text-slate-400 hover:text-red-600 text-sm">x</button>
     </li>
     {% endfor %}
   </ul>
-  <button class="js-add-item text-sm text-blue-600 mt-2" data-phase-id="{{ phase.id }}">+ Add item</button>
 </section>
-{% endfor %}
-<button class="js-add-phase mt-6 text-blue-600" data-project-id="{{ project.id }}">+ Add phase</button>
+
+<section id="resources" class="mt-8">
+  <h2 class="text-xl font-bold">Resources</h2>
+  {% if not resources %}
+  <p class="mt-2 text-sm text-slate-500">No resources yet.</p>
+  {% endif %}
+  <div class="mt-2 grid gap-3 md:grid-cols-2">
+    {% for r in resources %}
+    <article class="bg-white rounded shadow p-4">
+      <div class="flex items-start justify-between gap-3">
+        <h3 class="font-semibold text-slate-800">{{ r.title }}</h3>
+        {% if r.item_title %}<span class="shrink-0 rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{{ r.item_title }}</span>{% endif %}
+      </div>
+      {% if r.note %}<p class="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{{ r.note }}</p>{% endif %}
+      {% if r.url %}<a class="mt-2 inline-block text-sm text-blue-700 hover:underline" href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.url }}</a>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}

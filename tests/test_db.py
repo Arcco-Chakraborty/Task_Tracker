@@ -74,9 +74,21 @@ def test_create_project_from_extraction():
     extraction = {
         "title": "T", "summary": "S",
         "suggested_start": "2026-06-09", "suggested_due": "2026-06-30",
+        "info_cards": [{"title": "Constraint", "body": "Use the client portal"}],
+        "everyday_items": [
+            {"title": "Check inbox", "description": "Look for blockers",
+             "cadence": "daily"},
+        ],
+        "resources": [
+            {"title": "Portal", "url": "https://example.test",
+             "note": "Client upload area", "related_item_title": "i1"},
+        ],
         "phases": [
             {"name": "Ph1", "items": [
-                {"title": "i1", "description": "d", "deadline": None, "duration_days": 2},
+                {"title": "i1", "description": "d", "deadline": None,
+                 "duration_days": 2,
+                 "resources": [{"title": "Spec", "url": None,
+                                "note": "Pinned details"}]},
             ]},
         ],
     }
@@ -89,3 +101,16 @@ def test_create_project_from_extraction():
     assert phases[0]["name"] == "Ph1"
     items = db.list_items(conn, phases[0]["id"])
     assert items[0]["duration_days"] == 2
+    assert db.list_info_cards(conn, pid)[0]["title"] == "Constraint"
+    assert db.list_everyday_items(conn, pid)[0]["cadence"] == "daily"
+    resources = db.list_project_resources(conn, pid)
+    assert [r["title"] for r in resources] == ["Spec", "Portal"]
+    assert resources[1]["item_title"] == "i1"
+
+
+def test_everyday_status_update():
+    conn = _conn()
+    pid = db.create_project(conn, "A", "", "text", "x")
+    eid = db.create_everyday_item(conn, pid, "Review", cadence="daily")
+    db.set_everyday_status(conn, eid, "done")
+    assert db.list_everyday_items(conn, pid)[0]["status"] == "done"

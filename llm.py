@@ -1,7 +1,7 @@
 """llm.py — Gemini backend with round-robin key rotation.
 
 Ported from Mailbox/llm.py. Differences:
-  - keys are loaded from keys.txt (one per line; commas tolerated), not .env
+  - keys are loaded from .env / GEMINI_API_KEYS (comma-separated)
   - config is read from cfg["ai"] instead of cfg["summarize"]
 """
 from __future__ import annotations

@@ -40,26 +40,42 @@ def _project_view(conn, project, due_soon_days, today=None):
     urgency and progress."""
     today = today or date.today()
     phases = db.list_phases(conn, project["id"])
+    phase_items = []
     all_items = []
-    view_phases = []
     for phase in phases:
         items = db.list_items(conn, phase["id"])
-        resolved = schedule.resolve_item_dates(project["start_date"], items)
+        phase_items.append((phase, items))
+        all_items.extend(items)
+
+    resolved_dates = schedule.resolve_item_dates(project["start_date"],
+                                                 all_items)
+    resolved_by_id = {
+        item["id"]: rdate for item, rdate in zip(all_items, resolved_dates)
+    }
+
+    view_phases = []
+    for phase, items in phase_items:
         rows = []
-        for item, rdate in zip(items, resolved):
+        for item in items:
+            rdate = resolved_by_id.get(item["id"])
             rows.append({
                 **item,
                 "resolved_date": rdate,
                 "urgency": schedule.urgency(rdate, item["status"], today,
                                             due_soon_days),
+                "resources": db.list_item_resources(conn, item["id"]),
             })
-        all_items.extend(rows)
         view_phases.append({**phase, "items": rows,
                             "progress": schedule.progress(items)})
+    everyday = db.list_everyday_items(conn, project["id"])
     return {
         "project": project,
         "phases": view_phases,
         "progress": schedule.progress(all_items),
+        "info_cards": db.list_info_cards(conn, project["id"]),
+        "everyday_items": everyday,
+        "everyday_progress": schedule.progress(everyday),
+        "resources": db.list_project_resources(conn, project["id"]),
     }
 
 
@@ -69,18 +85,20 @@ def _all_dated_items(conn, due_soon_days, today=None):
     today = today or date.today()
     out = []
     for project in db.list_projects(conn):
+        ordered_items = []
         for phase in db.list_phases(conn, project["id"]):
-            items = db.list_items(conn, phase["id"])
-            resolved = schedule.resolve_item_dates(project["start_date"], items)
-            for item, rdate in zip(items, resolved):
-                out.append({
-                    **item,
-                    "project_id": project["id"],
-                    "project_title": project["title"],
-                    "resolved_date": rdate,
-                    "urgency": schedule.urgency(rdate, item["status"], today,
-                                                due_soon_days),
-                })
+            ordered_items.extend(db.list_items(conn, phase["id"]))
+        resolved = schedule.resolve_item_dates(project["start_date"],
+                                               ordered_items)
+        for item, rdate in zip(ordered_items, resolved):
+            out.append({
+                **item,
+                "project_id": project["id"],
+                "project_title": project["title"],
+                "resolved_date": rdate,
+                "urgency": schedule.urgency(rdate, item["status"], today,
+                                            due_soon_days),
+            })
     return out
 
 
@@ -138,30 +156,57 @@ def create_app(cfg=None) -> Flask:
             import tempfile, os as _os
             ext = _os.path.splitext(file.filename)[1]
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-            file.save(tmp.name)
+            tmp_path = tmp.name
             tmp.close()
             try:
-                source_type, source_name, text = extract.extract_text(tmp.name)
-            finally:
-                _os.unlink(tmp.name)
-            source_name = file.filename
+                file.save(tmp_path)
+                source_type, source_name, text = extract.extract_text(tmp_path)
+            except Exception as e:  # noqa: BLE001 - keep upload page alive
+                flask_app.logger.exception("File extraction failed")
+                try:
+                    _os.unlink(tmp_path)
+                except OSError:
+                    pass
+                return render_template(
+                    "upload.html",
+                    error=f"Could not read that file: {e}",
+                ), 400
+            else:
+                try:
+                    _os.unlink(tmp_path)
+                except OSError:
+                    flask_app.logger.warning("Could not delete temp upload")
+                source_name = file.filename
         else:
             text = request.form.get("text", "")
             source_type, source_name = "text", "typed"
         if not text.strip():
             return render_template("upload.html",
                                    error="Provide a file or some text."), 400
-        backend = llm.get_backend(cfg)
         max_chars = cfg.get("ai", {}).get("max_input_chars", 20000)
         try:
+            backend = llm.get_backend(cfg)
             data = extract.extract_project(
                 text, backend, start_date=start_date, due_date=due_date,
                 max_input_chars=max_chars)
         except llm.LLMError as e:
             return render_template("upload.html",
                                    error=f"AI extraction failed: {e}"), 502
-        pid = db.create_project_from_extraction(
-            conn, data, source_type, source_name, start_date, due_date)
+        except Exception as e:  # noqa: BLE001 - report without a crash page
+            flask_app.logger.exception("Unexpected upload failure")
+            return render_template(
+                "upload.html",
+                error=f"Upload failed before a tracker could be created: {e}",
+            ), 500
+        try:
+            pid = db.create_project_from_extraction(
+                conn, data, source_type, source_name, start_date, due_date)
+        except Exception as e:  # noqa: BLE001 - keep upload page alive
+            flask_app.logger.exception("Project persistence failed")
+            return render_template(
+                "upload.html",
+                error=f"Tracker was generated but could not be saved: {e}",
+            ), 500
         return redirect(url_for("project", project_id=pid))
 
     @flask_app.route("/item/<int:item_id>/status", methods=["POST"])
@@ -184,6 +229,17 @@ def create_app(cfg=None) -> Flask:
         db.delete_item(get_conn(flask_app), item_id)
         return jsonify({"ok": True})
 
+    @flask_app.route("/everyday/<int:everyday_id>/status", methods=["POST"])
+    def everyday_status(everyday_id):
+        status = (request.json or {}).get("status", "todo")
+        db.set_everyday_status(get_conn(flask_app), everyday_id, status)
+        return jsonify({"ok": True, "status": status})
+
+    @flask_app.route("/everyday/<int:everyday_id>/delete", methods=["POST"])
+    def everyday_delete(everyday_id):
+        db.delete_everyday_item(get_conn(flask_app), everyday_id)
+        return jsonify({"ok": True})
+
     @flask_app.route("/phase/<int:phase_id>/item", methods=["POST"])
     def phase_add_item(phase_id):
         payload = request.json or {}
@@ -195,6 +251,17 @@ def create_app(cfg=None) -> Flask:
                              duration_days=payload.get("duration_days"),
                              position=position)
         return jsonify({"ok": True, "id": iid})
+
+    @flask_app.route("/project/<int:project_id>/everyday", methods=["POST"])
+    def project_add_everyday(project_id):
+        payload = request.json or {}
+        conn = get_conn(flask_app)
+        position = len(db.list_everyday_items(conn, project_id))
+        eid = db.create_everyday_item(
+            conn, project_id, payload.get("title", "New everyday item"),
+            payload.get("description", ""), payload.get("cadence", ""),
+            position=position)
+        return jsonify({"ok": True, "id": eid})
 
     @flask_app.route("/project/<int:project_id>/phase", methods=["POST"])
     def project_add_phase(project_id):
