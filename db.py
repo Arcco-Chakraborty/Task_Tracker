@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
     email      TEXT NOT NULL UNIQUE,
     name       TEXT NOT NULL DEFAULT '',
     picture    TEXT NOT NULL DEFAULT '',
+    google_access_token  TEXT,
+    google_refresh_token TEXT,
+    google_token_expiry  TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS projects (
@@ -101,6 +104,12 @@ def init_db(conn: sqlite3.Connection) -> None:
              conn.execute("PRAGMA table_info(projects)").fetchall()]
     if "user_id" not in pcols:
         conn.execute("ALTER TABLE projects ADD COLUMN user_id INTEGER")
+    ucols = [r["name"] for r in
+             conn.execute("PRAGMA table_info(users)").fetchall()]
+    for col in ("google_access_token", "google_refresh_token",
+                "google_token_expiry"):
+        if col not in ucols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
     conn.commit()
 
 
@@ -128,6 +137,24 @@ def get_user(conn, user_id) -> dict | None:
     row = conn.execute("SELECT * FROM users WHERE id = ?",
                        (user_id,)).fetchone()
     return dict(row) if row else None
+
+
+def set_user_google_tokens(conn, user_id, access_token=None,
+                           refresh_token=None, expiry=None) -> None:
+    """Persist Google tokens on a user. refresh_token is only sent by Google on
+    first consent, so we keep the existing one when a later login omits it."""
+    sets, vals = [], []
+    if access_token is not None:
+        sets.append("google_access_token = ?"); vals.append(access_token)
+    if refresh_token:
+        sets.append("google_refresh_token = ?"); vals.append(refresh_token)
+    if expiry is not None:
+        sets.append("google_token_expiry = ?"); vals.append(expiry)
+    if not sets:
+        return
+    vals.append(user_id)
+    conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", vals)
+    conn.commit()
 
 
 def owns_item(conn, item_id, user_id) -> bool:
