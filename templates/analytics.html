@@ -12,7 +12,7 @@
   </div>
   <div class="card p-5 reveal" style="animation-delay:.10s"><p class="text-[11px] uppercase tracking-wider faint">Tasks</p><p class="font-mono text-3xl font-semibold mt-1">{{ analytics.total }}</p><p class="text-xs muted">{{ analytics.done }} done</p></div>
   <div class="card p-5 reveal" style="animation-delay:.14s"><p class="text-[11px] uppercase tracking-wider faint">Projects</p><p class="font-mono text-3xl font-semibold mt-1">{{ analytics.active_projects }}</p></div>
-  <div class="card p-5 reveal" style="animation-delay:.18s"><p class="text-[11px] uppercase tracking-wider faint">Overdue</p><p class="font-mono text-3xl font-semibold mt-1" style="color:{{ '#fb7185' if analytics.by_urgency.overdue else 'inherit' }}">{{ analytics.by_urgency.overdue }}</p></div>
+  <div class="card p-5 reveal" style="animation-delay:.18s"><p class="text-[11px] uppercase tracking-wider faint">Overdue</p><p class="font-mono text-3xl font-semibold mt-1" style="color:{{ '#ff9248' if analytics.by_urgency.overdue else 'inherit' }}">{{ analytics.by_urgency.overdue }}</p></div>
 </section>
 
 <div class="grid lg:grid-cols-2 gap-6 mt-6">

@@ -18,6 +18,7 @@
   --good: #34d399;
   --warn: #fbbf24;
   --bad: #fb7185;
+  --over: #ff9248;            /* overdue = orange, distinct from red accent */
   --radius: 18px;
   --radius-sm: 12px;
   --shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.7);
@@ -44,10 +45,7 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -2;
-  background:
-    radial-gradient(60rem 60rem at 12% -10%, rgba(122, 11, 30, 0.45), transparent 60%),
-    radial-gradient(50rem 50rem at 100% 0%, rgba(211, 31, 60, 0.20), transparent 55%),
-    linear-gradient(180deg, var(--bg-2), var(--bg));
+  background: linear-gradient(180deg, var(--bg-2), var(--bg));
 }
 body::after {
   content: "";
@@ -184,7 +182,7 @@ body::after {
 
 /* urgency dot */
 .u-dot { width: 8px; height: 8px; border-radius: 99px; flex: none; }
-.u-overdue { background: var(--bad); box-shadow: 0 0 10px var(--bad); }
+.u-overdue { background: var(--over); box-shadow: 0 0 10px var(--over); }
 .u-due-soon { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
 .u-upcoming { background: #6b7280; }
 .u-none { background: #3a3a42; }
