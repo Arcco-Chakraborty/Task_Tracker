@@ -270,3 +270,9 @@ a { color: inherit; }
   .app.mobile-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
   .topbar { padding: 10px 14px; gap: 10px; }
 }
+
+/* Replace the browser's default (blue) focus outline with a subtle on-brand one */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+/* native form-control accent (checkboxes etc.) -> brand red, never blue */
+:root { accent-color: var(--accent); }
