@@ -27,6 +27,7 @@
 {% set active = active|default('') %}
 {% set greet = ('Good morning' if now.hour < 12 else 'Good afternoon' if now.hour < 18 else 'Good evening') %}
 <div class="app" id="app">
+  <div class="sidebar-backdrop" onclick="closeMobile()"></div>
 
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
@@ -117,7 +118,7 @@
       </div>
       <div class="ml-auto flex items-center gap-2.5">
         <span class="pill font-mono hidden sm:inline-flex">{{ now.strftime('%a, %b %d') }}</span>
-        <span class="pill pill-accent" title="Productivity streak">🔥 {{ stats.streak }}d</span>
+        <span class="pill pill-accent hidden sm:inline-flex" title="Productivity streak">🔥 {{ stats.streak }}d</span>
         <a class="btn btn-accent" href="/upload">
           <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
           <span class="hidden sm:inline">New</span>
@@ -136,14 +137,23 @@
       </div>
     </header>
 
-    <main class="flex-1 px-6 py-6 md:px-9 md:py-8 max-w-[1400px] w-full mx-auto">
+    <main class="flex-1 px-4 py-5 sm:px-6 md:px-9 md:py-8 max-w-[1400px] w-full mx-auto">
       {% block body %}{% endblock %}
     </main>
   </div>
 </div>
 
 <script>
-  function toggleSidebar(){ document.getElementById('app').classList.toggle('collapsed'); }
+  function toggleSidebar(){
+    var app = document.getElementById('app');
+    if (window.matchMedia('(max-width: 900px)').matches) app.classList.toggle('mobile-open');
+    else app.classList.toggle('collapsed');
+  }
+  function closeMobile(){ document.getElementById('app').classList.remove('mobile-open'); }
+  // close the mobile drawer after tapping a nav link
+  document.addEventListener('click', function(e){
+    if (e.target.closest('.sidebar a') && window.matchMedia('(max-width: 900px)').matches) closeMobile();
+  });
   // lightweight client search filter over [data-card] items
   document.addEventListener('input', (e) => {
     if (!e.target.matches('[data-search]')) return;

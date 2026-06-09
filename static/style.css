@@ -248,3 +248,25 @@ a { color: inherit; }
 .link:hover { text-decoration: underline; }
 .muted { color: var(--text-dim); }
 .faint { color: var(--text-faint); }
+
+/* ---- Mobile / responsive ---- */
+.sidebar-backdrop { display: none; }
+@media (max-width: 900px) {
+  .app, .app.collapsed { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; width: 272px;
+    transform: translateX(-100%); transition: transform 0.26s var(--ease);
+    z-index: 60; background: var(--bg-2); box-shadow: var(--shadow);
+  }
+  .app.mobile-open .sidebar { transform: translateX(0); }
+  /* keep full labels in the slide-in drawer even if desktop 'collapsed' was set */
+  .app.collapsed .nav-label, .app.collapsed .sidebar-only { display: revert; }
+  .app.collapsed .sidebar { align-items: stretch; }
+  .app.collapsed .nav-item { justify-content: flex-start; padding: 9px 11px; }
+  .sidebar-backdrop {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
+    z-index: 55; opacity: 0; pointer-events: none; transition: opacity 0.26s;
+  }
+  .app.mobile-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+  .topbar { padding: 10px 14px; gap: 10px; }
+}
