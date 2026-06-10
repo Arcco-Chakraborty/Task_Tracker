@@ -86,47 +86,55 @@ document.addEventListener("click", (e) => {
     }
     return;
   }
-  if (e.target.classList.contains("js-delete")) {
-    const li = e.target.closest("[data-item-id]");
+  // closest() (not e.target.classList) so clicks on the SVGs inside these
+  // buttons still resolve to the button.
+  const del = e.target.closest(".js-delete");
+  if (del) {
+    const li = del.closest("[data-item-id]");
     if (confirm("Delete this item?")) {
       postJSON(`/item/${li.dataset.itemId}/delete`).then(() =>
         window.location.reload()
       );
     }
+    return;
   }
-  if (e.target.classList.contains("js-add-item")) {
-    const phaseId = e.target.dataset.phaseId;
+  const addItem = e.target.closest(".js-add-item");
+  if (addItem) {
     const title = prompt("New item title?");
     if (title) {
-      postJSON(`/phase/${phaseId}/item`, { title }).then(() =>
+      postJSON(`/phase/${addItem.dataset.phaseId}/item`, { title }).then(() =>
         window.location.reload()
       );
     }
+    return;
   }
-  if (e.target.classList.contains("js-add-phase")) {
-    const projectId = e.target.dataset.projectId;
+  const addPhase = e.target.closest(".js-add-phase");
+  if (addPhase) {
     const name = prompt("New phase name?");
     if (name) {
-      postJSON(`/project/${projectId}/phase`, { name }).then(() =>
-        window.location.reload()
+      postJSON(`/project/${addPhase.dataset.projectId}/phase`, { name }).then(
+        () => window.location.reload()
       );
     }
+    return;
   }
-  if (e.target.classList.contains("js-delete-everyday")) {
-    const li = e.target.closest("[data-everyday-id]");
+  const delEveryday = e.target.closest(".js-delete-everyday");
+  if (delEveryday) {
+    const li = delEveryday.closest("[data-everyday-id]");
     if (confirm("Delete this everyday item?")) {
       postJSON(`/everyday/${li.dataset.everydayId}/delete`).then(() =>
         window.location.reload()
       );
     }
+    return;
   }
-  if (e.target.classList.contains("js-add-everyday")) {
-    const projectId = e.target.dataset.projectId;
+  const addEveryday = e.target.closest(".js-add-everyday");
+  if (addEveryday) {
     const title = prompt("New everyday item?");
     if (title) {
-      postJSON(`/project/${projectId}/everyday`, { title }).then(() =>
-        window.location.reload()
-      );
+      postJSON(`/project/${addEveryday.dataset.projectId}/everyday`, {
+        title,
+      }).then(() => window.location.reload());
     }
   }
 });

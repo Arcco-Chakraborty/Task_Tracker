@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- BlackMoniker mark: ink check-square over a yellow highlighter swipe -->
+  <rect x="8" y="22" width="36" height="36" rx="10" fill="#FFE25A" transform="rotate(-8 26 40)"/>
+  <rect x="18" y="6" width="42" height="42" rx="11" fill="#15171C" transform="rotate(3 39 27)"/>
+  <path d="M30 27l7 7 14-14" stroke="#fff" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

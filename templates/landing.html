@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Margin — paste the mess, get the plan</title>
-<meta name="description" content="Margin reads your messy notes like a person with a highlighter, then files every deadline, task and meeting into Google Calendar.">
+<title>BlackMoniker — paste the mess, get the plan</title>
+<meta name="description" content="BlackMoniker reads your messy notes like a person with a highlighter, then files every deadline, task and meeting into Google Calendar.">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://api.fontshare.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -75,8 +76,8 @@ nav{position:sticky;top:0;z-index:40;backdrop-filter:blur(10px);-webkit-backdrop
 nav.stuck{border-color:var(--line)}
 .nav-in{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;max-width:1180px;margin:0 auto}
 .wordmark{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:-.01em}
-.wordmark .dot{width:11px;height:11px;border-radius:3px;background:var(--mk-deadline);transform:rotate(-6deg);transition:transform .4s var(--ease)}
-.wordmark:hover .dot{transform:rotate(354deg)}
+.wordmark .mark-logo{width:26px;height:26px;transform:rotate(-4deg);transition:transform .4s var(--ease)}
+.wordmark:hover .mark-logo{transform:rotate(356deg)}
 .nav-links{display:flex;gap:26px;align-items:center}
 .nav-links a:not(.login){font-size:13.5px;font-weight:500;color:var(--ink-soft);transition:color .18s}
 .nav-links a:not(.login):hover{color:var(--ink)}
@@ -325,7 +326,7 @@ footer{border-top:1px solid var(--line)}
 
 <nav id="nav">
   <div class="nav-in">
-    <a class="wordmark" href="#"><span class="dot"></span>Margin</a>
+    <a class="wordmark" href="#"><svg class="mark-logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="22" width="36" height="36" rx="10" fill="#FFE25A" transform="rotate(-8 26 40)"/><rect x="18" y="6" width="42" height="42" rx="11" fill="#15171C" transform="rotate(3 39 27)"/><path d="M30 27l7 7 14-14" stroke="#fff" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>BlackMoniker</a>
     <div class="nav-links">
       <a href="#demo">Live demo</a>
       <a href="#how">How it works</a>
@@ -342,7 +343,7 @@ footer{border-top:1px solid var(--line)}
     <span class="h1-line"><span>Paste the <span class="mess">mess<span class="strike"></span></span>.</span></span>
     <span class="h1-line"><span>Get the <span class="plan">plan</span>.</span></span>
   </h1>
-  <p class="lede fade" style="animation-delay:.5s">Margin reads your messy paragraphs, emails and lecture notes like a person with a highlighter — then files every <b>deadline, task, meeting and source</b> straight into Google&nbsp;Calendar.</p>
+  <p class="lede fade" style="animation-delay:.5s">BlackMoniker reads your messy paragraphs, emails and lecture notes like a person with a highlighter — then files every <b>deadline, task, meeting and source</b> straight into Google&nbsp;Calendar.</p>
   <div class="cta-row fade" style="animation-delay:.65s">
     <a class="login big" href="/login">
       <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#fff" d="M21.35 11.1H12v2.96h5.35c-.5 2.4-2.62 3.94-5.35 3.94a5.99 5.99 0 1 1 0-12c1.48 0 2.83.54 3.88 1.43l2.2-2.2A8.94 8.94 0 0 0 12 3a9 9 0 1 0 0 18c5.18 0 8.6-3.64 8.6-8.77 0-.38-.1-.75-.25-1.13Z"/></svg>
@@ -364,7 +365,7 @@ footer{border-top:1px solid var(--line)}
   <div class="theatre" id="theatre">
     <div class="t-head">
       <span class="t-dots"><i></i><i></i><i></i></span>
-      <span class="t-title">Margin · live</span>
+      <span class="t-title">BlackMoniker · live</span>
       <span class="t-phase" id="phase">paste</span>
     </div>
     <div class="t-body" id="tbody">
@@ -397,7 +398,7 @@ footer{border-top:1px solid var(--line)}
   <div class="sec-head rv">
     <span class="kicker">Exhibit A</span>
     <h2>Anatomy of a <span class="acc">perfectly normal</span> note</h2>
-    <p>This is what your notes actually look like. Here's everything Margin caught in it — and what it quietly fixed along the way.</p>
+    <p>This is what your notes actually look like. Here's everything BlackMoniker caught in it — and what it quietly fixed along the way.</p>
   </div>
   <div class="specimen">
     <div class="spec-paper rv" id="specPaper">
@@ -417,13 +418,13 @@ footer{border-top:1px solid var(--line)}
       <div class="spec-item rv" data-s="2">
         <span class="num">02</span>
         <div><h4>"sometime next week" got a hard edge</h4>
-        <p>Squishy deadlines are the ones that kill you. Margin pins it to end of next week at 23:59 and flags it as unconfirmed.</p>
+        <p>Squishy deadlines are the ones that kill you. BlackMoniker pins it to end of next week at 23:59 and flags it as unconfirmed.</p>
         <span class="pill chip c-deadline">REPORT · NEXT FRI 23:59 · ?</span></div>
       </div>
       <div class="spec-item rv" data-s="3">
         <span class="num">03</span>
         <div><h4>The recording became a linked source</h4>
-        <p>Things to read or watch aren't events — they're prep. Margin files them as sources and chains them <em>before</em> the thing they're for.</p>
+        <p>Things to read or watch aren't events — they're prep. BlackMoniker files them as sources and chains them <em>before</em> the thing they're for.</p>
         <span class="pill chip c-source">WATCH · BEFORE QUIZ</span></div>
       </div>
       <div class="spec-item rv" data-s="4">
@@ -435,7 +436,7 @@ footer{border-top:1px solid var(--line)}
       <div class="spec-item rv" data-s="5">
         <span class="num">05</span>
         <div><h4>Mom got a calendar slot</h4>
-        <p>Margin doesn't care if it's a thesis defense or a phone call home. If it has a day, it gets a place on the week.</p>
+        <p>BlackMoniker doesn't care if it's a thesis defense or a phone call home. If it has a day, it gets a place on the week.</p>
         <span class="pill chip c-event">CALL MOM · SUN</span></div>
       </div>
     </div>
@@ -477,7 +478,7 @@ footer{border-top:1px solid var(--line)}
   <div class="sec-head rv">
     <span class="kicker">Field tested</span>
     <h2>Built for people whose notes <span class="acc">look like this</span></h2>
-    <p>Four real species of mess. Margin reads all of them.</p>
+    <p>Four real species of mess. BlackMoniker reads all of them.</p>
   </div>
   <div class="people">
     <div class="person rv">
@@ -515,7 +516,7 @@ footer{border-top:1px solid var(--line)}
 
 <!-- ═══════════ MANIFESTO ═══════════ -->
 <section class="manifesto rv" id="manifesto">
-  <blockquote>"Every productivity app asks you to get organized first. Margin <span class="hi">meets you in the mess</span>."</blockquote>
+  <blockquote>"Every productivity app asks you to get organized first. BlackMoniker <span class="hi">meets you in the mess</span>."</blockquote>
   <span class="by">— The entire reason this exists</span>
 </section>
 
@@ -545,7 +546,7 @@ footer{border-top:1px solid var(--line)}
   <div class="faq rv">
     <details open>
       <summary>My notes are genuinely unhinged. Will it cope?<span class="pm">+</span></summary>
-      <div class="a">That's the point. Margin was built for run-on sentences, "the 18th" with no month, three tasks hiding in one line, and deadlines mentioned in passing inside a complaint. If a tired friend could decode it with a highlighter, Margin can. If it's unsure about something, it tells you instead of guessing silently.</div>
+      <div class="a">That's the point. BlackMoniker was built for run-on sentences, "the 18th" with no month, three tasks hiding in one line, and deadlines mentioned in passing inside a complaint. If a tired friend could decode it with a highlighter, BlackMoniker can. If it's unsure about something, it tells you instead of guessing silently.</div>
     </details>
     <details>
       <summary>Do I need to learn a syntax or format?<span class="pm">+</span></summary>
@@ -560,8 +561,8 @@ footer{border-top:1px solid var(--line)}
       <div class="a">Google Calendar today — full one-click sync with the original note attached to every event. More calendars are on the list; Google covers where most of the chaos lives.</div>
     </details>
     <details>
-      <summary>Why is it called Margin?<span class="pm">+</span></summary>
-      <div class="a">Because that's where real plans have always lived — scribbled in the margins of notebooks, syllabi and printouts. Margin just gives them somewhere better to go. Also, it buys you some.</div>
+      <summary>Why is it called BlackMoniker?<span class="pm">+</span></summary>
+      <div class="a">Because everything in your notes hides behind a vague moniker — <em>"that thing"</em>, <em>"the report"</em>, <em>"sometime next week"</em>. BlackMoniker drags each one into the open and writes it down properly: a real name, a real date, in ink.</div>
     </details>
     <details>
       <summary>How much does it cost?<span class="pm">+</span></summary>
@@ -582,14 +583,14 @@ footer{border-top:1px solid var(--line)}
 
 <footer>
   <div class="foot-in">
-    <span>MARGIN · PASTE THE MESS, GET THE PLAN</span>
+    <span>BLACKMONIKER · PASTE THE MESS, GET THE PLAN</span>
     <span><a href="#demo">DEMO</a> · <a href="#faq">FAQ</a> · <a href="/login">LOG IN</a> · BUILT BY ARCTEK SYSTEMS</span>
   </div>
 </footer>
 
 <script>
 /* ════════════════════════════════════════════════════════════════
-   Margin landing — theatre loop, ticker, reveals, micro-interactions
+   BlackMoniker landing — theatre loop, ticker, reveals, micro-interactions
    ════════════════════════════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;

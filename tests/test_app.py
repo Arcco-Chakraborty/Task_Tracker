@@ -250,7 +250,17 @@ def test_anonymous_index_shows_landing(tmp_path):
     client = flask_app.test_client()  # no session
     r = client.get("/")
     assert r.status_code == 200
-    assert b"Margin" in r.data and b"Paste the" in r.data
+    assert b"BlackMoniker" in r.data and b"Paste the" in r.data
+
+
+def test_all_pages_render_logged_in(tmp_path):
+    flask_app, client = _client(tmp_path)
+    _seed(flask_app)
+    for path in ("/", "/projects", "/today", "/planner", "/calendar",
+                 "/analytics", "/settings", "/upload", "/dashboard"):
+        r = client.get(path)
+        assert r.status_code == 200, f"{path} -> {r.status_code}"
+        assert b"BlackMoniker" in r.data  # branded chrome everywhere
 
 
 def test_users_are_isolated(tmp_path):

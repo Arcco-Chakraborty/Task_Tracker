@@ -9,7 +9,8 @@
     <!-- HERO -->
     <section class="reveal" style="animation-delay:.02s">
       <p class="muted text-sm">{{ now.strftime('%A, %B %d') }}</p>
-      <h1 class="text-3xl md:text-4xl font-semibold tracking-tight mt-1">{{ greet }}, <span style="color:var(--accent)">Arcco</span></h1>
+      {% set firstname = ((user.name or user.email).split(' ')[0] if user else 'there') %}
+      <h1 class="text-3xl md:text-4xl font-bold tracking-tight mt-1">{{ greet }}, <mark style="background:var(--mk-deadline);padding:.05em .15em;border-radius:.4em .15em .45em .2em">{{ firstname }}</mark></h1>
       <p class="muted mt-1">{% if hero.overdue %}You have {{ hero.overdue }} task{{ 's' if hero.overdue != 1 }} overdue — let's clear them.{% elif hero.total %}You're {{ hero.overall }}% through your tracked work. Keep the momentum.{% else %}Nothing tracked yet. Create your first plan to begin.{% endif %}</p>
     </section>
 
@@ -36,11 +37,11 @@
       <div class="card p-5 reveal" style="animation-delay:.14s">
         <p class="text-[11px] uppercase tracking-wider faint">Everyday today</p>
         <p class="font-mono text-3xl font-semibold mt-1">{{ hero.everyday_done }}<span class="faint text-xl">/{{ hero.everyday_total }}</span></p>
-        <div class="mt-3">{{ bar(hero.everyday_pct, 'linear-gradient(90deg,#34d399,#0ea5a4)') }}</div>
+        <div class="mt-3">{{ bar(hero.everyday_pct, 'linear-gradient(90deg,#8CE7B0,#3FB36F)') }}</div>
       </div>
       <div class="card p-5 reveal" style="animation-delay:.18s">
         <p class="text-[11px] uppercase tracking-wider faint">Overdue</p>
-        <p class="font-mono text-3xl font-semibold mt-1" style="color:{{ '#ff9248' if hero.overdue else 'inherit' }}">{{ hero.overdue }}</p>
+        <p class="font-mono text-3xl font-semibold mt-1" style="color:{{ 'var(--over)' if hero.overdue else 'inherit' }}">{{ hero.overdue }}</p>
         <p class="text-xs muted mt-0.5">{{ 'needs attention' if hero.overdue else 'all clear ✓' }}</p>
       </div>
     </section>
@@ -91,7 +92,7 @@
   <aside class="space-y-4" data-aside>
     <div class="card p-5 reveal" style="animation-delay:.12s">
       <div class="flex items-center gap-2">
-        <span class="grid h-7 w-7 place-items-center rounded-lg text-white" style="background:linear-gradient(135deg,var(--accent-2),var(--accent-deep))">
+        <span class="grid h-7 w-7 place-items-center rounded-lg" style="background:var(--mk-deadline);color:var(--mk-deadline-deep)">
           <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>
         </span>
         <h2 class="font-semibold">AI Planner</h2>
