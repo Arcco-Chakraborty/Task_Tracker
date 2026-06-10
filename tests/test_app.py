@@ -237,10 +237,20 @@ def test_anonymous_redirected_to_login(tmp_path):
     cfg = {"app": {"db_path": db_path}, "tracking": {"due_soon_days": 3}}
     flask_app = app_module.create_app(cfg)
     client = flask_app.test_client()  # no session
-    for path in ("/", "/projects", "/today", "/calendar", "/analytics"):
+    for path in ("/projects", "/today", "/calendar", "/analytics"):
         r = client.get(path)
         assert r.status_code == 302 and "/login" in r.headers["Location"]
     assert client.get("/login").status_code == 200
+
+
+def test_anonymous_index_shows_landing(tmp_path):
+    db_path = str(tmp_path / "t.db")
+    cfg = {"app": {"db_path": db_path}, "tracking": {"due_soon_days": 3}}
+    flask_app = app_module.create_app(cfg)
+    client = flask_app.test_client()  # no session
+    r = client.get("/")
+    assert r.status_code == 200
+    assert b"Margin" in r.data and b"Paste the" in r.data
 
 
 def test_users_are_isolated(tmp_path):

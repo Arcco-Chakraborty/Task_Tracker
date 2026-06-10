@@ -221,10 +221,13 @@ def create_app(cfg=None) -> Flask:
         return projects
 
     @flask_app.route("/")
-    @login_required
     def index():
-        conn = get_conn(flask_app)
+        # Logged-out visitors get the marketing landing page; signed-in users
+        # get their dashboard.
         uid = current_user_id()
+        if uid is None:
+            return render_template("landing.html")
+        conn = get_conn(flask_app)
         today = date.today()
         due_soon = flask_app.config["DUE_SOON_DAYS"]
         projects = _projects_with_progress(conn, uid)
