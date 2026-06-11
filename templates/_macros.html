@@ -40,7 +40,8 @@
         </span>
         {{ effort(it.weight or 3) }}
         {% if it.resolved_date %}
-        <button class="link js-gcal-item" type="button">+ Google Calendar</button>
+        <a class="link" target="_blank" rel="noopener noreferrer"
+           href="{{ gcal_link((ptitle ~ ': ' ~ it.title) if ptitle else it.title, it.resolved_date, it.description or '') }}">+ Google Calendar</a>
         {% endif %}
       </div>
       {% if it.resources %}

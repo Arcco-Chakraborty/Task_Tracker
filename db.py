@@ -139,24 +139,6 @@ def get_user(conn, user_id) -> dict | None:
     return dict(row) if row else None
 
 
-def set_user_google_tokens(conn, user_id, access_token=None,
-                           refresh_token=None, expiry=None) -> None:
-    """Persist Google tokens on a user. refresh_token is only sent by Google on
-    first consent, so we keep the existing one when a later login omits it."""
-    sets, vals = [], []
-    if access_token is not None:
-        sets.append("google_access_token = ?"); vals.append(access_token)
-    if refresh_token:
-        sets.append("google_refresh_token = ?"); vals.append(refresh_token)
-    if expiry is not None:
-        sets.append("google_token_expiry = ?"); vals.append(expiry)
-    if not sets:
-        return
-    vals.append(user_id)
-    conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", vals)
-    conn.commit()
-
-
 def owns_item(conn, item_id, user_id) -> bool:
     row = conn.execute(
         "SELECT 1 FROM items i JOIN phases ph ON i.phase_id = ph.id "

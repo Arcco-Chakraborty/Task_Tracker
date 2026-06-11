@@ -51,32 +51,6 @@ document.addEventListener("change", (e) => {
 });
 
 document.addEventListener("click", (e) => {
-  const gItem = e.target.closest(".js-gcal-item");
-  if (gItem) {
-    const li = e.target.closest("[data-item-id]");
-    gItem.disabled = true;
-    const old = gItem.textContent;
-    gItem.textContent = "Adding…";
-    postJSON(`/item/${li.dataset.itemId}/gcal`).then((r) => {
-      gItem.textContent = r.ok ? "✓ Added to Google Calendar" : old;
-      gItem.disabled = !r.ok;
-      if (!r.ok) alert(r.error || "Could not add to Google Calendar");
-    });
-    return;
-  }
-  const gProj = e.target.closest(".js-gcal-project");
-  if (gProj) {
-    gProj.disabled = true;
-    const old = gProj.textContent;
-    gProj.textContent = "Syncing…";
-    postJSON(`/project/${gProj.dataset.projectId}/gcal`).then((r) => {
-      gProj.disabled = false;
-      gProj.textContent = old;
-      alert(r.ok ? `Added ${r.added} task(s) to your Google Calendar.`
-                 : (r.error || "Could not sync to Google Calendar"));
-    });
-    return;
-  }
   const delProj = e.target.closest(".js-delete-project");
   if (delProj) {
     if (confirm("Delete this entire project and all its tasks? This cannot be undone.")) {

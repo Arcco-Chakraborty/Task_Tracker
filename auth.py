@@ -6,8 +6,6 @@ scoped workspace; an optional ALLOWED_EMAILS allowlist can restrict access.
 """
 from __future__ import annotations
 
-import os
-from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -22,10 +20,9 @@ auth_bp = Blueprint("auth", __name__)
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO = "https://www.googleapis.com/oauth2/v2/userinfo"
-# openid/email/profile for identity + calendar.events to add tasks to the
-# signed-in user's Google Calendar directly.
-SCOPES = ("openid email profile "
-          "https://www.googleapis.com/auth/calendar.events")
+# Identity only — no sensitive scopes, so Google shows no "unverified app"
+# warning. Calendar adds use permissionless prefilled links instead.
+SCOPES = "openid email profile"
 
 
 def _conn():
@@ -77,9 +74,6 @@ def google_start():
         "redirect_uri": current_app.config.get("GOOGLE_REDIRECT_URI", ""),
         "response_type": "code",
         "scope": SCOPES,
-        "access_type": "offline",   # ask for a refresh token
-        "prompt": "consent",        # ...and ensure one is returned
-        "include_granted_scopes": "true",
     }
     return redirect(GOOGLE_AUTH + "?" + urlencode(params))
 
@@ -114,13 +108,6 @@ def google_callback():
     conn = _conn()
     user = db.get_or_create_user(conn, email, info.get("name", ""),
                                  info.get("picture", ""))
-    # Persist Google tokens so we can add events to the user's calendar.
-    expiry = (datetime.now(timezone.utc)
-              + timedelta(seconds=int(token.get("expires_in", 3600)))).isoformat()
-    db.set_user_google_tokens(conn, user["id"],
-                              access_token=token.get("access_token"),
-                              refresh_token=token.get("refresh_token"),
-                              expiry=expiry)
     session.clear()
     session["user_id"] = user["id"]
     session.permanent = True

@@ -10,7 +10,6 @@ from flask import (Flask, abort, g, has_app_context, jsonify, redirect,
 
 import db
 import extract
-import gcal
 import ics
 import llm
 import schedule
@@ -597,53 +596,6 @@ def create_app(cfg=None) -> Flask:
                  flask_app.config["DUE_SOON_DAYS"], user_id=uid)
                  if i["project_id"] == project_id]
         return _ics_response(items)
-
-    # --- direct Google Calendar add (uses the user's stored OAuth token) ---
-    def _gcal_payload(items):
-        return [{"summary": f"{i['project_title']}: {i['title']}",
-                 "resolved_date": i["resolved_date"],
-                 "description": i.get("description", "")}
-                for i in items if i["resolved_date"]]
-
-    def _do_sync(conn, payload):
-        return gcal.sync_items(conn, current_user(),
-                               flask_app.config["GOOGLE_CLIENT_ID"],
-                               flask_app.config["GOOGLE_CLIENT_SECRET"], payload)
-
-    @flask_app.route("/project/<int:project_id>/gcal", methods=["POST"])
-    @login_required
-    def project_gcal(project_id):
-        conn = get_conn(flask_app)
-        uid = current_user_id()
-        if db.get_project(conn, project_id, uid) is None:
-            abort(404)
-        items = [i for i in _all_dated_items(conn,
-                 flask_app.config["DUE_SOON_DAYS"], user_id=uid)
-                 if i["project_id"] == project_id]
-        try:
-            n = _do_sync(conn, _gcal_payload(items))
-        except gcal.CalendarError as e:
-            return jsonify({"ok": False, "error": str(e)}), 400
-        return jsonify({"ok": True, "added": n})
-
-    @flask_app.route("/item/<int:item_id>/gcal", methods=["POST"])
-    @login_required
-    def item_gcal(item_id):
-        conn = get_conn(flask_app)
-        uid = current_user_id()
-        if not db.owns_item(conn, item_id, uid):
-            abort(403)
-        match = next((i for i in _all_dated_items(
-            conn, flask_app.config["DUE_SOON_DAYS"], user_id=uid)
-            if i["id"] == item_id), None)
-        if not match or not match["resolved_date"]:
-            return jsonify({"ok": False,
-                            "error": "This task has no scheduled date yet."}), 400
-        try:
-            _do_sync(conn, _gcal_payload([match]))
-        except gcal.CalendarError as e:
-            return jsonify({"ok": False, "error": str(e)}), 400
-        return jsonify({"ok": True, "added": 1})
 
     return flask_app
 

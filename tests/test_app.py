@@ -216,8 +216,9 @@ def test_project_page_has_day_grid_and_gcal(tmp_path):
     db.create_item(conn, ph, "Task", "", deadline="2026-06-20", position=0)
     resp = client.get(f"/project/{pid}")
     assert resp.status_code == 200
-    assert b"js-everyday-day" in resp.data          # per-day checkbox grid
-    assert b"js-gcal-project" in resp.data           # direct add-to-Google-Calendar
+    assert b"js-everyday-day" in resp.data           # per-day checkbox grid
+    assert b"calendar.google.com" in resp.data       # per-item prefilled gcal link
+    assert b"export.ics" in resp.data                # whole-project .ics export
 
 
 def test_project_delete(tmp_path):
@@ -283,40 +284,8 @@ def test_users_are_isolated(tmp_path):
     assert client.post(f"/item/{tit}/status", json={"status": "done"}).status_code == 403
 
 
-def test_item_gcal_route(tmp_path, monkeypatch):
-    flask_app, client = _client(tmp_path)
-    pid = _seed(flask_app)
-    conn = app_module.get_conn(flask_app)
-    ph = db.list_phases(conn, pid)[0]
-    iid = db.list_items(conn, ph["id"])[0]["id"]
-    db.update_item(conn, iid, deadline="2026-06-20")
-    calls = {}
-    monkeypatch.setattr(app_module.gcal, "sync_items",
-                        lambda conn, user, cid, cs, items: calls.setdefault("items", items) or len(items))
-    r = client.post(f"/item/{iid}/gcal")
-    assert r.status_code == 200 and r.get_json()["added"] == 1
-    assert calls["items"][0]["resolved_date"] is not None
-
-
-def test_item_gcal_no_date(tmp_path):
-    flask_app, client = _client(tmp_path)
-    pid = _seed(flask_app)
-    conn = app_module.get_conn(flask_app)
-    ph = db.list_phases(conn, pid)[0]
-    iid = db.list_items(conn, ph["id"])[0]["id"]
-    db.update_item(conn, iid, duration_days=None, deadline=None)
-    # project has start_date but item has neither date nor duration -> unscheduled
-    r = client.post(f"/item/{iid}/gcal")
-    assert r.status_code == 400
-
-
-def test_project_gcal_route(tmp_path, monkeypatch):
-    flask_app, client = _client(tmp_path)
-    pid = _seed(flask_app)
-    conn = app_module.get_conn(flask_app)
-    ph = db.list_phases(conn, pid)[0]
-    db.update_item(conn, db.list_items(conn, ph["id"])[0]["id"], deadline="2026-06-20")
-    monkeypatch.setattr(app_module.gcal, "sync_items",
-                        lambda *a, **k: 1)
-    r = client.post(f"/project/{pid}/gcal")
-    assert r.status_code == 200 and r.get_json()["added"] == 1
+def test_basic_scopes_only():
+    """Login must not request sensitive scopes (keeps Google's consent screen
+    free of the 'unverified app' warning)."""
+    import auth
+    assert auth.SCOPES == "openid email profile"
