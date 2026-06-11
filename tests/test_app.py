@@ -358,6 +358,26 @@ def test_oauth_state_in_redirect(tmp_path):
     assert r.status_code == 302 and "/login" in r.headers["Location"]
 
 
+def test_seo_endpoints_public(tmp_path):
+    flask_app, client = _client(tmp_path)
+    with client.session_transaction() as sess:
+        sess.clear()  # anonymous
+    r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert b"Sitemap:" in r.data and b"Disallow: /admin" in r.data
+    r = client.get("/sitemap.xml")
+    assert r.status_code == 200 and b"<urlset" in r.data
+    assert b"https://blackmoniker.com/privacy" in r.data
+    r = client.get("/llms.txt")
+    assert r.status_code == 200 and b"BlackMoniker" in r.data
+    # landing carries social + structured data
+    body = client.get("/").data
+    assert b'property="og:image"' in body
+    assert b'application/ld+json' in body
+    assert b'"FAQPage"' in body
+    assert b'rel="canonical"' in body
+
+
 def test_privacy_page_public(tmp_path):
     flask_app, client = _client(tmp_path)
     with client.session_transaction() as sess:

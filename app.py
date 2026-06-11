@@ -690,9 +690,64 @@ def create_app(cfg=None) -> Flask:
 
     # --- public pages -------------------------------------------------------
 
+    site_url = os.environ.get("SITE_URL", "https://blackmoniker.com").rstrip("/")
+
     @flask_app.route("/privacy")
     def privacy():
         return render_template("privacy.html")
+
+    @flask_app.route("/robots.txt")
+    def robots_txt():
+        lines = ["User-agent: *", "Allow: /"]
+        # All of these are login-gated anyway; keep crawlers off the redirects.
+        for path in ("/admin", "/project/", "/projects", "/today", "/planner",
+                     "/calendar", "/analytics", "/settings", "/upload",
+                     "/dashboard", "/auth/", "/login", "/logout",
+                     "/export.ics"):
+            lines.append(f"Disallow: {path}")
+        lines += ["", f"Sitemap: {site_url}/sitemap.xml"]
+        return Response("\n".join(lines) + "\n", mimetype="text/plain")
+
+    @flask_app.route("/sitemap.xml")
+    def sitemap_xml():
+        urls = [(f"{site_url}/", "weekly", "1.0"),
+                (f"{site_url}/privacy", "yearly", "0.3")]
+        body = "".join(
+            f"<url><loc>{u}</loc><changefreq>{c}</changefreq>"
+            f"<priority>{p}</priority></url>" for u, c, p in urls)
+        xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+               '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+               f"{body}</urlset>")
+        return Response(xml, mimetype="application/xml")
+
+    @flask_app.route("/llms.txt")
+    def llms_txt():
+        return Response(f"""\
+# BlackMoniker
+
+> BlackMoniker ({site_url}) turns messy notes, emails, syllabi and documents
+> into structured, trackable plans. Paste unstructured text or upload a
+> PDF/Markdown file; AI extracts every deadline, task, meeting and source,
+> sequences them correctly (time-sensitive items first), assigns effort
+> weights, and builds a tracker with phases, daily habit grids, progress
+> analytics and one-click Google Calendar links.
+
+## How it works
+- Sign in with Google (identity only — no access to Gmail/Drive/Calendar).
+- Paste text or upload a document; Gemini extracts and sequences the plan.
+- Track tasks (todo / in progress / done), everyday habits per day, and
+  progress weighted by effort. Export deadlines as .ics or add single
+  events to Google Calendar via prefilled links.
+
+## Pages
+- [Landing]({site_url}/): product overview, live demo, FAQ, contact form
+- [Privacy]({site_url}/privacy): plain-language privacy policy
+
+The app itself ({site_url}/login and beyond) requires sign-in; per-user
+workspaces are private and not crawlable.
+
+Free while in beta. Built by Arctek Systems.
+""", mimetype="text/plain")
 
     @flask_app.route("/contact", methods=["POST"])
     def contact():
