@@ -280,6 +280,53 @@ a { color: inherit; }
   .topbar { padding: 10px 14px; gap: 10px; }
 }
 
+/* ---- Upload loading theatre: a note being read with a highlighter ---- */
+@keyframes logo-bob { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg) translateY(-2px); } }
+.loading-logo { animation: logo-bob 2.2s var(--ease) infinite; }
+
+.skel-line {
+  position: relative; height: 11px; border-radius: 6px;
+  background: var(--paper-deep); overflow: hidden; margin: 9px 0;
+}
+.skel-mark {
+  position: absolute; top: 0; bottom: 0; border-radius: 6px 3px 7px 3px;
+  transform: scaleX(0); transform-origin: left center;
+  animation: mark-sweep 5.6s var(--ease) infinite;
+}
+.mk-y { background: var(--mk-deadline); }
+.mk-p { background: var(--mk-event); }
+.mk-g { background: var(--mk-task); }
+.mk-r { background: var(--mk-source); }
+@keyframes mark-sweep {
+  0%   { transform: scaleX(0); opacity: 1; }
+  12%  { transform: scaleX(1); opacity: 1; }
+  70%  { transform: scaleX(1); opacity: 1; }
+  82%, 100% { transform: scaleX(1); opacity: 0; }
+}
+
+[data-stages] li {
+  display: flex; align-items: center; gap: 9px;
+  color: var(--ink-faint); transition: color 0.3s;
+}
+[data-stages] li::before {
+  content: ""; width: 15px; height: 15px; border-radius: 5px; flex: none;
+  border: 1.5px solid var(--line); background: var(--card-bg);
+  transition: all 0.3s var(--ease);
+}
+[data-stages] li.active { color: var(--ink); font-weight: 600; }
+[data-stages] li.active::before { border-color: var(--ink); }
+[data-stages] li.done { color: var(--ink-soft); }
+[data-stages] li.done::before {
+  background: var(--mk-task); border-color: transparent;
+  content: "✓"; color: var(--mk-task-deep); font-size: 10px; font-weight: 800;
+  display: grid; place-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel-mark { animation: none; transform: scaleX(1); }
+  .loading-logo { animation: none; }
+}
+
 /* On-brand focus ring (ink, like the landing) instead of the browser default */
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 6px; }

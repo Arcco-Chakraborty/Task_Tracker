@@ -18,9 +18,38 @@ if (uploadForm) {
       submit.classList.add("opacity-60", "cursor-wait");
       submit.textContent = "Generating...";
     }
-    if (loading) {
-      loading.classList.remove("hidden");
-      loading.classList.add("flex");
+    if (!loading) return;
+    loading.classList.remove("hidden");
+    loading.classList.add("flex");
+
+    // Stage checklist: tick stages off on a schedule that mirrors the
+    // typical ~25s extraction, so the wait reads as visible work.
+    const title = loading.querySelector("[data-stage-title]");
+    const stages = [...loading.querySelectorAll("[data-stages] li")];
+    const start = Date.now();
+    stages.forEach((li) => {
+      const at = Number(li.dataset.at) * 1000;
+      setTimeout(() => {
+        stages.forEach((other) => {
+          if (Number(other.dataset.at) * 1000 < at) {
+            other.classList.remove("active");
+            other.classList.add("done");
+          }
+        });
+        li.classList.add("active");
+        if (title) title.textContent = li.textContent + "…";
+      }, at);
+    });
+
+    // Progress bar: ease toward 94% and wait there — the redirect ends it.
+    const barFill = loading.querySelector("[data-progress]");
+    if (barFill) {
+      const tick = () => {
+        const t = (Date.now() - start) / 1000;
+        barFill.style.width = (94 * (1 - Math.exp(-t / 12))).toFixed(1) + "%";
+        if (t < 120) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
     }
   });
 }

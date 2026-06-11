@@ -31,10 +31,40 @@
 </div>
 
 <div class="fixed inset-0 z-50 hidden items-center justify-center p-4" data-upload-loading style="background:rgba(21,23,28,.45);backdrop-filter:blur(8px)">
-  <div class="card p-8 text-center max-w-sm w-full">
-    <div class="mx-auto h-12 w-12 animate-spin rounded-full" style="border:3px solid var(--border);border-top-color:var(--accent)"></div>
-    <h2 class="mt-5 text-lg font-semibold">Generating your plan</h2>
-    <p class="mt-1 text-sm muted">Reading the document and sequencing it with Gemini…</p>
+  <div class="card max-w-md w-full p-7">
+    <div class="flex items-center gap-3">
+      <svg class="h-10 w-10 shrink-0 loading-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="8" y="22" width="36" height="36" rx="10" fill="#FFE25A" transform="rotate(-8 26 40)"/>
+        <rect x="18" y="6" width="42" height="42" rx="11" fill="#15171C" transform="rotate(3 39 27)"/>
+        <path d="M30 27l7 7 14-14" stroke="#fff" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="min-w-0">
+        <h2 class="text-lg font-bold leading-tight" data-stage-title>Reading your document…</h2>
+        <p class="text-xs muted mt-0.5">usually 20–30 seconds — good plans take a moment</p>
+      </div>
+    </div>
+
+    <!-- the note being read: skeleton lines swept by highlighter marks -->
+    <div class="mt-5 rounded-xl p-4" style="background:var(--paper);border:1px solid var(--line)" aria-hidden="true">
+      <div class="skel-line" style="width:92%"><span class="skel-mark mk-y" style="left:4%;width:34%;animation-delay:.2s"></span></div>
+      <div class="skel-line" style="width:100%"><span class="skel-mark mk-p" style="left:48%;width:30%;animation-delay:1.1s"></span></div>
+      <div class="skel-line" style="width:84%"><span class="skel-mark mk-g" style="left:12%;width:42%;animation-delay:2.0s"></span></div>
+      <div class="skel-line" style="width:96%"><span class="skel-mark mk-r" style="left:60%;width:28%;animation-delay:2.9s"></span></div>
+      <div class="skel-line" style="width:71%"><span class="skel-mark mk-y" style="left:30%;width:38%;animation-delay:3.8s"></span></div>
+      <div class="skel-line" style="width:89%"><span class="skel-mark mk-g" style="left:6%;width:26%;animation-delay:4.7s"></span></div>
+    </div>
+
+    <!-- what the AI is doing, ticked off as it goes -->
+    <ul class="mt-5 space-y-1.5 text-sm" data-stages>
+      <li data-at="0">Reading the document</li>
+      <li data-at="5">Hunting for deadlines &amp; dates</li>
+      <li data-at="10">Flagging time-sensitive actions</li>
+      <li data-at="15">Expanding lists into single tasks</li>
+      <li data-at="20">Sequencing phases in the right order</li>
+      <li data-at="25">Weighing effort &amp; building your tracker</li>
+    </ul>
+
+    <div class="bar mt-5"><span data-progress style="width:2%"></span></div>
   </div>
 </div>
 {% endblock %}
