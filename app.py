@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import threading
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import urlparse
@@ -133,6 +134,30 @@ def _all_dated_items(conn, due_soon_days, today=None, user_id=None):
                                             due_soon_days),
             })
     return out
+
+
+def _run_extract_job(db_path, cfg, job_id, text, source_type, source_name,
+                     start_date, due_date, user_id):
+    """Run one extraction in a background thread with its own DB connection.
+    The request that spawned this has already returned; the browser polls the
+    job row, so neither gunicorn nor nginx timeouts apply to the AI call."""
+    conn = db.connect(db_path)
+    try:
+        backend = llm.get_backend(cfg)
+        max_chars = cfg.get("ai", {}).get("max_input_chars", 20000)
+        data = extract.extract_project(text, backend, start_date=start_date,
+                                       due_date=due_date,
+                                       max_input_chars=max_chars)
+        pid = db.create_project_from_extraction(
+            conn, data, source_type, source_name, start_date, due_date,
+            user_id=user_id)
+        db.finish_job(conn, job_id, project_id=pid)
+    except llm.LLMError as e:
+        db.finish_job(conn, job_id, error=f"AI extraction failed: {e}")
+    except Exception as e:  # noqa: BLE001 - surface anything to the poller
+        db.finish_job(conn, job_id, error=f"Unexpected failure: {e}")
+    finally:
+        conn.close()
 
 
 def _streak(days: set, today) -> int:
@@ -436,8 +461,26 @@ def create_app(cfg=None) -> Flask:
             text = request.form.get("text", "")
             source_type, source_name = "text", "typed"
         if not text.strip():
+            if request.headers.get("X-Async") == "1":
+                return jsonify({"ok": False,
+                                "error": "Provide a file or some text."}), 400
             return render_template("upload.html",
                                    error="Provide a file or some text."), 400
+
+        # Async path (the JS upload): hand the slow AI call to a background
+        # thread and return a job id immediately — request/proxy/worker
+        # timeouts can no longer kill a long extraction.
+        if request.headers.get("X-Async") == "1":
+            uid = current_user_id()
+            jid = db.create_job(conn, uid)
+            threading.Thread(
+                target=_run_extract_job,
+                args=(flask_app.config["DB_PATH"], cfg, jid, text,
+                      source_type, source_name, start_date, due_date, uid),
+                daemon=True).start()
+            return jsonify({"ok": True, "job_id": jid})
+
+        # Legacy synchronous path (no-JS fallback and tests).
         max_chars = cfg.get("ai", {}).get("max_input_chars", 20000)
         try:
             backend = llm.get_backend(cfg)
@@ -464,6 +507,15 @@ def create_app(cfg=None) -> Flask:
                 error=f"Tracker was generated but could not be saved: {e}",
             ), 500
         return redirect(url_for("project", project_id=pid))
+
+    @flask_app.route("/upload/job/<int:job_id>")
+    @login_required
+    def upload_job_status(job_id):
+        job = db.get_job(get_conn(flask_app), job_id, current_user_id())
+        if job is None:
+            abort(404)
+        return jsonify({"status": job["status"], "error": job["error"],
+                        "project_id": job["project_id"]})
 
     def _require_item(conn, item_id):
         if not db.owns_item(conn, item_id, current_user_id()):

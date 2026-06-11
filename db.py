@@ -79,6 +79,14 @@ CREATE TABLE IF NOT EXISTS everyday_completions (
     day         TEXT NOT NULL,
     UNIQUE(everyday_id, day)
 );
+CREATE TABLE IF NOT EXISTS extract_jobs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER,
+    status     TEXT NOT NULL DEFAULT 'pending',
+    error      TEXT NOT NULL DEFAULT '',
+    project_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS contact_messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL DEFAULT '',
@@ -607,3 +615,31 @@ def signups_per_day(conn, since_day) -> dict:
         "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM users "
         "WHERE created_at >= ? GROUP BY day", (since_day,)).fetchall()
     return {r["day"]: r["n"] for r in rows}
+
+
+# --- background extraction jobs ----------------------------------------------
+
+def create_job(conn, user_id) -> int:
+    cur = conn.execute("INSERT INTO extract_jobs (user_id) VALUES (?)",
+                       (user_id,))
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_job(conn, job_id, user_id=None) -> dict | None:
+    if user_id is not None:
+        row = conn.execute(
+            "SELECT * FROM extract_jobs WHERE id = ? AND user_id = ?",
+            (job_id, user_id)).fetchone()
+    else:
+        row = conn.execute("SELECT * FROM extract_jobs WHERE id = ?",
+                           (job_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def finish_job(conn, job_id, project_id=None, error="") -> None:
+    conn.execute(
+        "UPDATE extract_jobs SET status = ?, project_id = ?, error = ? "
+        "WHERE id = ?",
+        ("error" if error else "done", project_id, error, job_id))
+    conn.commit()

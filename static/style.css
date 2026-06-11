@@ -198,10 +198,10 @@ h1, h2, h3 {
 .u-none { background: var(--paper-deep); border: 1px solid var(--border-strong); }
 .u-done { background: var(--mk-task); border: 1px solid rgba(30,107,58,.35); }
 
-/* ---- Progress ring ---- */
-.ring { transform: rotate(-90deg); }
-.ring-track { stroke: rgba(21, 23, 28, 0.08); }
-.ring-bar { stroke: url(#ringgrad); stroke-linecap: round; transition: stroke-dashoffset 1s var(--ease); }
+/* ---- Progress ring ("pring": "ring" collides with Tailwind's utility) ---- */
+.pring { transform: rotate(-90deg); }
+.pring-track { stroke: rgba(21, 23, 28, 0.08); }
+.pring-bar { stroke: url(#ringgrad); stroke-linecap: round; transition: stroke-dashoffset 1s var(--ease); }
 
 /* ---- Linear progress: a highlighter stroke ---- */
 .bar { height: 7px; border-radius: 99px; background: var(--paper-deep); overflow: hidden; }

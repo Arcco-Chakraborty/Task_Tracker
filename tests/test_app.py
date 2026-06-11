@@ -284,6 +284,62 @@ def test_users_are_isolated(tmp_path):
     assert client.post(f"/item/{tit}/status", json={"status": "done"}).status_code == 403
 
 
+def test_async_upload_job_flow(tmp_path, monkeypatch):
+    import time as _time
+    flask_app, client = _client(tmp_path)
+
+    class FakeBackend:
+        def complete(self, prompt):
+            return {"title": "Async Plan", "phases": [
+                {"name": "P1", "items": [{"title": "Task A"}]}]}
+
+    monkeypatch.setattr(app_module.llm, "get_backend",
+                        lambda cfg: FakeBackend())
+    r = client.post("/upload", data={"text": "do work"},
+                    headers={"X-Async": "1"})
+    assert r.status_code == 200
+    jid = r.get_json()["job_id"]
+    # wait for the background thread to finish
+    conn = app_module.get_conn(flask_app)
+    for _ in range(50):
+        job = db.get_job(conn, jid)
+        if job["status"] != "pending":
+            break
+        _time.sleep(0.1)
+    assert job["status"] == "done", job["error"]
+    assert job["project_id"] is not None
+    # the poll endpoint reports it (and enforces ownership)
+    s = client.get(f"/upload/job/{jid}").get_json()
+    assert s["status"] == "done" and s["project_id"] == job["project_id"]
+    other = db.get_or_create_user(conn, "other@example.com", "O", "")
+    with client.session_transaction() as sess:
+        sess["user_id"] = other["id"]
+    assert client.get(f"/upload/job/{jid}").status_code == 404
+
+
+def test_async_upload_empty_text_is_json_error(tmp_path):
+    flask_app, client = _client(tmp_path)
+    r = client.post("/upload", data={"text": "  "}, headers={"X-Async": "1"})
+    assert r.status_code == 400 and r.get_json()["ok"] is False
+
+
+def test_ring_class_does_not_collide_with_tailwind(tmp_path):
+    # Tailwind's "ring" utility paints a square box-shadow outline; our
+    # progress ring must use "pring".
+    flask_app, client = _client(tmp_path)
+    _seed(flask_app)
+    body = client.get("/").data
+    assert b'class="pring"' in body
+    assert b'class="ring"' not in body
+
+
+def test_task_card_has_in_progress_control(tmp_path):
+    flask_app, client = _client(tmp_path)
+    pid = _seed(flask_app)
+    body = client.get(f"/project/{pid}").data
+    assert b"js-progress" in body
+
+
 def test_basic_scopes_only():
     """Login must not request sensitive scopes (keeps Google's consent screen
     free of the 'unverified app' warning)."""

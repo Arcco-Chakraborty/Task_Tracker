@@ -1,11 +1,13 @@
 {# Reusable premium UI components. #}
 
+{# NOTE: the svg class must NOT be "ring" — that's a Tailwind utility that
+   paints a box-shadow outline (the mystery square/blue box around rings). #}
 {% macro ring(pct, size=78, stroke=8) %}
 {% set r = (size - stroke) / 2.0 %}
 {% set c = 6.2831853 * r %}
-<svg class="ring" width="{{ size }}" height="{{ size }}" viewBox="0 0 {{ size }} {{ size }}">
-  <circle class="ring-track" cx="{{ size/2 }}" cy="{{ size/2 }}" r="{{ r }}" fill="none" stroke-width="{{ stroke }}"/>
-  <circle class="ring-bar" cx="{{ size/2 }}" cy="{{ size/2 }}" r="{{ r }}" fill="none" stroke-width="{{ stroke }}"
+<svg class="pring" width="{{ size }}" height="{{ size }}" viewBox="0 0 {{ size }} {{ size }}">
+  <circle class="pring-track" cx="{{ size/2 }}" cy="{{ size/2 }}" r="{{ r }}" fill="none" stroke-width="{{ stroke }}"/>
+  <circle class="pring-bar" cx="{{ size/2 }}" cy="{{ size/2 }}" r="{{ r }}" fill="none" stroke-width="{{ stroke }}"
     stroke-dasharray="{{ c }}" stroke-dashoffset="{{ c * (1 - pct/100.0) }}"/>
 </svg>
 {% endmacro %}
@@ -39,6 +41,12 @@
           {% if it.resolved_date %}<span class="font-mono">{{ it.resolved_date }}</span>{% elif it.duration_days %}~{{ it.duration_days }}d{% else %}<span class="faint">unscheduled</span>{% endif %}
         </span>
         {{ effort(it.weight or 3) }}
+        {% if it.status != 'done' %}
+        <button class="js-progress pill {{ 'pill-warn' if it.status == 'in_progress' }}" type="button"
+                title="{{ 'Mark as not started' if it.status == 'in_progress' else 'Mark as in progress' }}">
+          {{ '◐ In progress' if it.status == 'in_progress' else '▸ Start' }}
+        </button>
+        {% endif %}
         {% if it.resolved_date %}
         <a class="link" target="_blank" rel="noopener noreferrer"
            href="{{ gcal_link((ptitle ~ ': ' ~ it.title) if ptitle else it.title, it.resolved_date, it.description or '') }}">+ Google Calendar</a>

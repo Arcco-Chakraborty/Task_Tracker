@@ -10,7 +10,10 @@ async function postJSON(url, body) {
 
 const uploadForm = document.querySelector("[data-upload-form]");
 if (uploadForm) {
-  uploadForm.addEventListener("submit", () => {
+  uploadForm.addEventListener("submit", (ev) => {
+    // Async upload: the AI call runs in a server-side background job and we
+    // poll it, so neither the proxy nor the worker can time the request out.
+    ev.preventDefault();
     const loading = document.querySelector("[data-upload-loading]");
     const submit = document.querySelector("[data-upload-submit]");
     if (submit) {
@@ -18,6 +21,46 @@ if (uploadForm) {
       submit.classList.add("opacity-60", "cursor-wait");
       submit.textContent = "Generating...";
     }
+
+    const restore = (msg) => {
+      if (msg) alert(msg);
+      if (loading) {
+        loading.classList.add("hidden");
+        loading.classList.remove("flex");
+      }
+      if (submit) {
+        submit.disabled = false;
+        submit.classList.remove("opacity-60", "cursor-wait");
+        submit.textContent = "Generate tracker";
+      }
+    };
+
+    fetch("/upload", {
+      method: "POST",
+      headers: { "X-Async": "1" },
+      body: new FormData(uploadForm),
+    })
+      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) return restore(r.error || "Upload failed.");
+        const poll = () => {
+          fetch(`/upload/job/${r.job_id}`)
+            .then((p) => p.json())
+            .then((job) => {
+              if (job.status === "done") {
+                window.location = `/project/${job.project_id}`;
+              } else if (job.status === "error") {
+                restore(job.error || "Extraction failed — please try again.");
+              } else {
+                setTimeout(poll, 2500);
+              }
+            })
+            .catch(() => setTimeout(poll, 4000)); // transient blip: keep polling
+        };
+        setTimeout(poll, 4000);
+      })
+      .catch(() => restore("Could not reach the server — try again."));
+
     if (!loading) return;
     loading.classList.remove("hidden");
     loading.classList.add("flex");
@@ -87,6 +130,16 @@ document.addEventListener("click", (e) => {
         window.location = "/projects";
       });
     }
+    return;
+  }
+  // toggle todo <-> in_progress (done stays on the checkbox)
+  const prog = e.target.closest(".js-progress");
+  if (prog) {
+    const li = prog.closest("[data-item-id]");
+    const status = li.dataset.status === "in_progress" ? "todo" : "in_progress";
+    postJSON(`/item/${li.dataset.itemId}/status`, { status }).then(() =>
+      window.location.reload()
+    );
     return;
   }
   // closest() (not e.target.classList) so clicks on the SVGs inside these
