@@ -6,6 +6,7 @@ scoped workspace; an optional ALLOWED_EMAILS allowlist can restrict access.
 """
 from __future__ import annotations
 
+import secrets
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -69,17 +70,24 @@ def login():
 
 @auth_bp.route("/auth/google")
 def google_start():
+    # `state` ties the callback to this browser session (blocks login CSRF).
+    state = secrets.token_urlsafe(24)
+    session["oauth_state"] = state
     params = {
         "client_id": current_app.config.get("GOOGLE_CLIENT_ID", ""),
         "redirect_uri": current_app.config.get("GOOGLE_REDIRECT_URI", ""),
         "response_type": "code",
         "scope": SCOPES,
+        "state": state,
     }
     return redirect(GOOGLE_AUTH + "?" + urlencode(params))
 
 
 @auth_bp.route("/auth/callback")
 def google_callback():
+    expected_state = session.pop("oauth_state", None)
+    if not expected_state or request.args.get("state") != expected_state:
+        return redirect(url_for("auth.login", error="Sign-in expired, try again"))
     code = request.args.get("code")
     if not code:
         return redirect(url_for("auth.login", error="Authentication failed"))

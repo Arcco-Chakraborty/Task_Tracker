@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS everyday_completions (
     day         TEXT NOT NULL,
     UNIQUE(everyday_id, day)
 );
+CREATE TABLE IF NOT EXISTS contact_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL DEFAULT '',
+    email      TEXT NOT NULL DEFAULT '',
+    message    TEXT NOT NULL,
+    ip         TEXT NOT NULL DEFAULT '',
+    is_read    INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -524,3 +533,77 @@ def create_project_from_extraction(conn, extraction, source_type, source_name,
             item_id=item_ids_by_title.get(related), position=resource_pos)
         resource_pos += 1
     return pid
+
+
+# --- contact messages & admin ------------------------------------------------
+
+def create_contact_message(conn, name, email, message, ip="") -> int:
+    cur = conn.execute(
+        "INSERT INTO contact_messages (name, email, message, ip) "
+        "VALUES (?, ?, ?, ?)", (name, email, message, ip))
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_contact_messages(conn) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM contact_messages ORDER BY is_read, id DESC").fetchall()]
+
+
+def set_message_read(conn, message_id, read=True) -> None:
+    conn.execute("UPDATE contact_messages SET is_read = ? WHERE id = ?",
+                 (1 if read else 0, message_id))
+    conn.commit()
+
+
+def delete_contact_message(conn, message_id) -> None:
+    conn.execute("DELETE FROM contact_messages WHERE id = ?", (message_id,))
+    conn.commit()
+
+
+def count_messages_from_ip_since(conn, ip, since_iso) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM contact_messages WHERE ip = ? AND created_at > ?",
+        (ip, since_iso)).fetchone()[0]
+
+
+def _scalar(conn, sql, params=()) -> int:
+    return conn.execute(sql, params).fetchone()[0]
+
+
+def admin_overview(conn) -> dict:
+    """Whole-instance counters for the admin dashboard."""
+    return {
+        "users": _scalar(conn, "SELECT COUNT(*) FROM users"),
+        "projects": _scalar(conn, "SELECT COUNT(*) FROM projects"),
+        "items": _scalar(conn, "SELECT COUNT(*) FROM items"),
+        "items_done": _scalar(
+            conn, "SELECT COUNT(*) FROM items WHERE status = 'done'"),
+        "everyday_completions": _scalar(
+            conn, "SELECT COUNT(*) FROM everyday_completions"),
+        "messages": _scalar(conn, "SELECT COUNT(*) FROM contact_messages"),
+        "messages_unread": _scalar(
+            conn, "SELECT COUNT(*) FROM contact_messages WHERE is_read = 0"),
+    }
+
+
+def list_users_admin(conn) -> list[dict]:
+    """All users (newest first) with per-user project/task counts."""
+    return [dict(r) for r in conn.execute(
+        "SELECT u.id, u.email, u.name, u.picture, u.created_at, "
+        "       COUNT(DISTINCT p.id) AS project_count, "
+        "       COUNT(i.id) AS item_count, "
+        "       SUM(CASE WHEN i.status = 'done' THEN 1 ELSE 0 END) AS done_count "
+        "FROM users u "
+        "LEFT JOIN projects p ON p.user_id = u.id "
+        "LEFT JOIN phases ph ON ph.project_id = p.id "
+        "LEFT JOIN items i ON i.phase_id = ph.id "
+        "GROUP BY u.id ORDER BY u.id DESC").fetchall()]
+
+
+def signups_per_day(conn, since_day) -> dict:
+    """{'YYYY-MM-DD': n} of new accounts per day since `since_day` (ISO)."""
+    rows = conn.execute(
+        "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM users "
+        "WHERE created_at >= ? GROUP BY day", (since_day,)).fetchall()
+    return {r["day"]: r["n"] for r in rows}

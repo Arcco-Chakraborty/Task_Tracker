@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% from "_macros.html" import bar with context %}
+{% block title %}Admin{% endblock %}
+{% block body %}
+
+<div class="flex items-center justify-between flex-wrap gap-3 reveal">
+  <div>
+    <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Admin</h1>
+    <p class="muted mt-1">Instance overview — everything happening on BlackMoniker.</p>
+  </div>
+  <span class="pill pill-warn">internal · admins only</span>
+</div>
+
+<!-- KPIs -->
+<section class="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
+  <div class="card p-5 reveal" style="animation-delay:.04s">
+    <p class="text-[11px] uppercase tracking-wider faint">Users</p>
+    <p class="font-mono text-3xl font-semibold mt-1">{{ overview.users }}</p>
+    <p class="text-xs muted mt-0.5">+{{ overview.new_this_week }} this week</p>
+  </div>
+  <div class="card p-5 reveal" style="animation-delay:.08s">
+    <p class="text-[11px] uppercase tracking-wider faint">Projects</p>
+    <p class="font-mono text-3xl font-semibold mt-1">{{ overview.projects }}</p>
+  </div>
+  <div class="card p-5 reveal" style="animation-delay:.12s">
+    <p class="text-[11px] uppercase tracking-wider faint">Tasks</p>
+    <p class="font-mono text-3xl font-semibold mt-1">{{ overview['items'] }}</p>
+    <p class="text-xs muted mt-0.5">{{ overview.items_done }} done</p>
+    <div class="mt-2">{{ bar((overview.items_done / overview['items'] * 100) if overview['items'] else 0) }}</div>
+  </div>
+  <div class="card p-5 reveal" style="animation-delay:.16s">
+    <p class="text-[11px] uppercase tracking-wider faint">Everyday ticks</p>
+    <p class="font-mono text-3xl font-semibold mt-1">{{ overview.everyday_completions }}</p>
+  </div>
+  <div class="card p-5 reveal" style="animation-delay:.20s">
+    <p class="text-[11px] uppercase tracking-wider faint">Messages</p>
+    <p class="font-mono text-3xl font-semibold mt-1">{{ overview.messages }}</p>
+    {% if overview.messages_unread %}<span class="pill pill-bad mt-1">{{ overview.messages_unread }} unread</span>
+    {% else %}<p class="text-xs muted mt-0.5">all read ✓</p>{% endif %}
+  </div>
+</section>
+
+<!-- SIGNUPS CHART -->
+<section class="card p-6 mt-6 reveal" style="animation-delay:.10s">
+  <div class="flex items-center justify-between">
+    <h2 class="font-semibold">Signups · last 30 days</h2>
+    <span class="font-mono text-xs muted">{{ signup_trend | sum(attribute='n') }} total</span>
+  </div>
+  <div class="mt-6 flex items-end gap-1 h-36">
+    {% for t in signup_trend %}
+    <div class="flex-1 flex flex-col items-center gap-1.5" title="{{ t.date }}: {{ t.n }} signup{{ 's' if t.n != 1 }}">
+      <div class="w-full rounded-t" style="height:{{ (t.n / signup_max * 100) }}%;min-height:3px;background:{{ 'linear-gradient(180deg,var(--mk-deadline),#E5B800)' if t.n else 'var(--paper-deep)' }}"></div>
+      {% if loop.index0 % 5 == 0 %}<span class="text-[9px] faint font-mono">{{ t.label }}</span>{% else %}<span class="text-[9px]">&nbsp;</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid xl:grid-cols-2 gap-6 mt-6">
+  <!-- USERS -->
+  <section class="card p-6 reveal" style="animation-delay:.14s">
+    <h2 class="font-semibold mb-4">Users</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm" style="border-collapse:collapse">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wider faint">
+            <th class="pb-2 pr-3 font-medium">User</th>
+            <th class="pb-2 pr-3 font-medium">Joined</th>
+            <th class="pb-2 pr-3 font-medium text-right">Projects</th>
+            <th class="pb-2 pr-3 font-medium text-right">Tasks</th>
+            <th class="pb-2 font-medium text-right">Done</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr style="border-top:1px solid var(--line)">
+            <td class="py-2.5 pr-3">
+              <div class="flex items-center gap-2.5 min-w-0">
+                {% if u.picture %}<img src="{{ u.picture }}" alt="" class="h-7 w-7 rounded-full object-cover shrink-0" referrerpolicy="no-referrer">
+                {% else %}<span class="grid h-7 w-7 place-items-center rounded-full text-[11px] font-bold text-white shrink-0" style="background:var(--ink)">{{ (u.name or u.email)[0]|upper }}</span>{% endif %}
+                <div class="min-w-0">
+                  <p class="font-medium truncate">{{ u.name or '—' }}</p>
+                  <p class="text-xs muted truncate">{{ u.email }}</p>
+                </div>
+              </div>
+            </td>
+            <td class="py-2.5 pr-3 font-mono text-xs muted whitespace-nowrap">{{ (u.created_at or '')[:10] or '—' }}</td>
+            <td class="py-2.5 pr-3 font-mono text-right">{{ u.project_count }}</td>
+            <td class="py-2.5 pr-3 font-mono text-right">{{ u.item_count }}</td>
+            <td class="py-2.5 font-mono text-right">{{ u.done_count or 0 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- MESSAGES -->
+  <section class="card p-6 reveal" style="animation-delay:.18s">
+    <h2 class="font-semibold mb-4">Contact messages</h2>
+    {% if not messages %}<p class="muted text-sm">No messages yet. They'll appear here when someone uses the contact form.</p>{% endif %}
+    <ul class="space-y-3">
+      {% for m in messages %}
+      <li class="card-flush p-4" data-msg-id="{{ m.id }}"
+          {% if not m.is_read %}style="border-left:4px solid var(--mk-deadline)"{% endif %}>
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="font-medium text-sm">{{ m.name or 'Anonymous' }}
+              {% if not m.is_read %}<span class="pill pill-warn ml-1">new</span>{% endif %}</p>
+            {% if m.email %}<a class="text-xs link" href="mailto:{{ m.email }}">{{ m.email }}</a>{% endif %}
+          </div>
+          <span class="font-mono text-[11px] faint whitespace-nowrap">{{ (m.created_at or '')[:16] }}</span>
+        </div>
+        <p class="mt-2 text-sm muted whitespace-pre-wrap">{{ m.message }}</p>
+        <div class="mt-3 flex gap-2">
+          {% if not m.is_read %}<button class="btn js-msg-read" style="padding:4px 10px;font-size:12px">Mark read</button>{% endif %}
+          <button class="btn js-msg-del" style="padding:4px 10px;font-size:12px;color:var(--bad)">Delete</button>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener("click", (e) => {
+    const read = e.target.closest(".js-msg-read");
+    const del = e.target.closest(".js-msg-del");
+    if (!read && !del) return;
+    const id = e.target.closest("[data-msg-id]").dataset.msgId;
+    if (del && !confirm("Delete this message?")) return;
+    postJSON(`/admin/messages/${id}/${del ? "delete" : "read"}`)
+      .then(() => window.location.reload());
+  });
+</script>
+{% endblock %}

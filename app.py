@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from functools import wraps
+from urllib.parse import urlparse
 
 from flask import (Flask, abort, g, has_app_context, jsonify, redirect,
                    render_template, request, url_for, Response)
@@ -157,19 +159,41 @@ def create_app(cfg=None) -> Flask:
 
     # --- sessions & auth (Google OAuth, ported from arctronas) ---
     flask_app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+    https_enabled = os.environ.get("HTTPS_ENABLED", "").lower() == "true"
     flask_app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=os.environ.get("HTTPS_ENABLED", "").lower() == "true",
+        SESSION_COOKIE_SECURE=https_enabled,
         PERMANENT_SESSION_LIFETIME=86400,
+        MAX_CONTENT_LENGTH=10 * 1024 * 1024,  # cap uploads at 10 MB
         GOOGLE_CLIENT_ID=os.environ.get("GOOGLE_OAUTH_CLIENT_ID", ""),
         GOOGLE_CLIENT_SECRET=os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", ""),
         GOOGLE_REDIRECT_URI=os.environ.get(
             "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/auth/callback"),
         ALLOWED_EMAILS=os.environ.get("ALLOWED_EMAILS", ""),
+        ADMIN_EMAILS=os.environ.get("ADMIN_EMAILS", ""),
         GET_CONN=lambda: get_conn(flask_app),
     )
     flask_app.register_blueprint(auth_bp)
+
+    def _is_admin(user) -> bool:
+        """Admin = email listed in ADMIN_EMAILS; if unset, the first account
+        (id 1 — the instance owner) is the admin."""
+        if not user:
+            return False
+        raw = flask_app.config.get("ADMIN_EMAILS", "")
+        allow = [e.strip().lower() for e in raw.split(",") if e.strip()]
+        if allow:
+            return user["email"].lower() in allow
+        return user["id"] == 1
+
+    def admin_required(view):
+        @wraps(view)
+        def wrapper(*args, **kwargs):
+            if not _is_admin(current_user()):
+                abort(404)  # don't reveal the admin surface exists
+            return view(*args, **kwargs)
+        return login_required(wrapper)
 
     # Expose the Google Calendar link builder to templates.
     flask_app.jinja_env.globals["gcal_link"] = ics.gcal_link
@@ -185,18 +209,44 @@ def create_app(cfg=None) -> Flask:
         if conn is not None:
             conn.close()
 
+    @flask_app.before_request
+    def _reject_cross_origin_posts():
+        """Belt-and-braces CSRF guard: state-changing requests must come from
+        our own origin (SameSite=Lax cookies already block most CSRF)."""
+        if request.method == "POST":
+            origin = request.headers.get("Origin")
+            if origin and urlparse(origin).netloc not in ("", request.host):
+                abort(403)
+
     @flask_app.after_request
     def _security_headers(resp):
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        resp.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()")
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com "
+            "https://api.fontshare.com; "
+            "font-src https://fonts.gstatic.com https://api.fontshare.com "
+            "https://cdn.fontshare.com data:; "
+            "img-src 'self' data: https://*.googleusercontent.com; "
+            "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; "
+            "form-action 'self'")
+        if https_enabled:
+            resp.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains")
         return resp
 
     @flask_app.context_processor
     def _inject_globals():
         """`now`, `user`, and per-user `stats` for the chrome."""
         uid = current_user_id()
-        base = {"now": datetime.now(), "user": current_user(),
+        user = current_user()
+        base = {"now": datetime.now(), "user": user,
+                "is_admin": _is_admin(user),
                 "stats": {"streak": 0, "week_done": 0}}
         if uid is None:
             return base
@@ -225,7 +275,8 @@ def create_app(cfg=None) -> Flask:
         # get their dashboard.
         uid = current_user_id()
         if uid is None:
-            return render_template("landing.html")
+            return render_template("landing.html",
+                                   sent=request.args.get("sent"))
         conn = get_conn(flask_app)
         today = date.today()
         due_soon = flask_app.config["DUE_SOON_DAYS"]
@@ -584,6 +635,68 @@ def create_app(cfg=None) -> Flask:
         conn = get_conn(flask_app)
         return _ics_response(_all_dated_items(
             conn, flask_app.config["DUE_SOON_DAYS"], user_id=current_user_id()))
+
+    # --- public pages -------------------------------------------------------
+
+    @flask_app.route("/privacy")
+    def privacy():
+        return render_template("privacy.html")
+
+    @flask_app.route("/contact", methods=["POST"])
+    def contact():
+        # Honeypot: bots fill the hidden "website" field; pretend success.
+        if request.form.get("website"):
+            return redirect("/?sent=1#contact")
+        name = (request.form.get("name") or "").strip()[:120]
+        email = (request.form.get("email") or "").strip()[:200]
+        message = (request.form.get("message") or "").strip()[:5000]
+        if not message:
+            return redirect("/#contact")
+        conn = get_conn(flask_app)
+        ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+              or request.remote_addr or "")
+        hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)
+                    ).strftime("%Y-%m-%d %H:%M:%S")
+        if db.count_messages_from_ip_since(conn, ip, hour_ago) >= 5:
+            return "Too many messages — try again later.", 429
+        db.create_contact_message(conn, name, email, message, ip)
+        return redirect("/?sent=1#contact")
+
+    # --- admin --------------------------------------------------------------
+
+    @flask_app.route("/admin")
+    @admin_required
+    def admin():
+        conn = get_conn(flask_app)
+        today = date.today()
+        overview = db.admin_overview(conn)
+        users = db.list_users_admin(conn)
+        week_ago = (today - timedelta(days=7)).isoformat()
+        overview["new_this_week"] = sum(
+            1 for u in users if (u["created_at"] or "") >= week_ago)
+        per_day = db.signups_per_day(conn, (today - timedelta(days=29)).isoformat())
+        signup_trend = []
+        for n in range(29, -1, -1):
+            d = today - timedelta(days=n)
+            signup_trend.append({"date": d.isoformat(),
+                                 "label": d.strftime("%d"),
+                                 "n": per_day.get(d.isoformat(), 0)})
+        return render_template(
+            "admin.html", active="admin", overview=overview, users=users,
+            messages=db.list_contact_messages(conn), signup_trend=signup_trend,
+            signup_max=max((t["n"] for t in signup_trend), default=0) or 1)
+
+    @flask_app.route("/admin/messages/<int:message_id>/read", methods=["POST"])
+    @admin_required
+    def admin_message_read(message_id):
+        db.set_message_read(get_conn(flask_app), message_id)
+        return jsonify({"ok": True})
+
+    @flask_app.route("/admin/messages/<int:message_id>/delete", methods=["POST"])
+    @admin_required
+    def admin_message_delete(message_id):
+        db.delete_contact_message(get_conn(flask_app), message_id)
+        return jsonify({"ok": True})
 
     @flask_app.route("/project/<int:project_id>/export.ics")
     @login_required

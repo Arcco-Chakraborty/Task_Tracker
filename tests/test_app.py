@@ -289,3 +289,88 @@ def test_basic_scopes_only():
     free of the 'unverified app' warning)."""
     import auth
     assert auth.SCOPES == "openid email profile"
+
+
+def test_oauth_state_in_redirect(tmp_path):
+    flask_app, client = _client(tmp_path)
+    with client.session_transaction() as sess:
+        sess.clear()  # log out
+    r = client.get("/auth/google")
+    assert r.status_code == 302 and "state=" in r.headers["Location"]
+    # callback with a wrong/missing state is rejected before token exchange
+    r = client.get("/auth/callback?code=x&state=forged")
+    assert r.status_code == 302 and "/login" in r.headers["Location"]
+
+
+def test_privacy_page_public(tmp_path):
+    flask_app, client = _client(tmp_path)
+    with client.session_transaction() as sess:
+        sess.clear()
+    r = client.get("/privacy")
+    assert r.status_code == 200 and b"Privacy" in r.data
+
+
+def test_contact_form_and_rate_limit(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    r = client.post("/contact", data={"name": "A", "email": "a@b.c",
+                                      "message": "hello"})
+    assert r.status_code == 302
+    msgs = db.list_contact_messages(conn)
+    assert len(msgs) == 1 and msgs[0]["message"] == "hello"
+    # honeypot filled -> swallowed silently, nothing stored
+    client.post("/contact", data={"message": "spam", "website": "http://x"})
+    assert len(db.list_contact_messages(conn)) == 1
+    # empty message -> not stored
+    client.post("/contact", data={"message": "   "})
+    assert len(db.list_contact_messages(conn)) == 1
+    # 5 messages/hour/IP cap
+    for i in range(4):
+        client.post("/contact", data={"message": f"m{i}"})
+    r = client.post("/contact", data={"message": "one too many"})
+    assert r.status_code == 429
+
+
+def test_admin_dashboard_access(tmp_path):
+    flask_app, client = _client(tmp_path)  # tester is user id 1 -> admin
+    _seed(flask_app)
+    conn = app_module.get_conn(flask_app)
+    db.create_contact_message(conn, "Visitor", "v@x.y", "love it", "1.2.3.4")
+    r = client.get("/admin")
+    assert r.status_code == 200
+    assert b"Instance overview" in r.data and b"love it" in r.data
+    # a non-first user without ADMIN_EMAILS is not an admin -> 404
+    other = db.get_or_create_user(conn, "other@example.com", "Other", "")
+    with client.session_transaction() as sess:
+        sess["user_id"] = other["id"]
+    assert client.get("/admin").status_code == 404
+    assert client.post("/admin/messages/1/read").status_code == 404
+
+
+def test_admin_message_actions(tmp_path):
+    flask_app, client = _client(tmp_path)
+    conn = app_module.get_conn(flask_app)
+    mid = db.create_contact_message(conn, "V", "v@x.y", "hi", "ip")
+    assert client.post(f"/admin/messages/{mid}/read").status_code == 200
+    assert db.list_contact_messages(conn)[0]["is_read"] == 1
+    assert client.post(f"/admin/messages/{mid}/delete").status_code == 200
+    assert db.list_contact_messages(conn) == []
+
+
+def test_cross_origin_post_blocked(tmp_path):
+    flask_app, client = _client(tmp_path)
+    pid = _seed(flask_app)
+    conn = app_module.get_conn(flask_app)
+    ph = db.list_phases(conn, pid)[0]
+    iid = db.list_items(conn, ph["id"])[0]["id"]
+    r = client.post(f"/item/{iid}/status", json={"status": "done"},
+                    headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+
+
+def test_security_headers(tmp_path):
+    flask_app, client = _client(tmp_path)
+    r = client.get("/login")
+    assert "Content-Security-Policy" in r.headers
+    assert r.headers["X-Frame-Options"] == "DENY"
+    assert "Permissions-Policy" in r.headers
