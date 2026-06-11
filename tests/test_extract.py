@@ -118,3 +118,55 @@ def test_normalize_captures_time_sensitive_and_floats_it_first():
 def test_normalize_time_sensitive_defaults_false():
     raw = {"phases": [{"name": "P", "items": [{"title": "x"}]}]}
     assert extract.normalize_extraction(raw)["phases"][0]["items"][0]["time_sensitive"] is False
+
+
+def test_clip_document_keeps_head_and_tail():
+    doc = "HEAD " + ("x" * 30000) + " TAIL-DEADLINE-LIST"
+    clipped = extract.clip_document(doc, 1000)
+    assert len(clipped) < 1100
+    assert clipped.startswith("HEAD")
+    assert clipped.endswith("TAIL-DEADLINE-LIST")
+    assert "omitted for length" in clipped
+
+
+def test_normalize_drops_empty_phases():
+    out = extract.normalize_extraction({
+        "phases": [{"name": "Empty", "items": []},
+                   {"name": "Real", "items": [{"title": "t"}]}]})
+    assert [p["name"] for p in out["phases"]] == ["Real"]
+
+
+def test_normalize_accepts_iso_datetime_deadline():
+    out = extract.normalize_extraction({
+        "phases": [{"name": "P", "items": [
+            {"title": "t", "deadline": "2026-06-19T00:00:00Z"}]}]})
+    assert out["phases"][0]["items"][0]["deadline"] == "2026-06-19"
+
+
+def test_normalize_caps_duration():
+    out = extract.normalize_extraction({
+        "phases": [{"name": "P", "items": [
+            {"title": "t", "duration_days": 5000}]}]})
+    assert out["phases"][0]["items"][0]["duration_days"] == 90
+
+
+def test_normalize_dedupes_toplevel_resources_attached_to_items():
+    out = extract.normalize_extraction({
+        "phases": [{"name": "P", "items": [
+            {"title": "t", "resources": [
+                {"title": "Spec", "url": "https://e.x/spec"}]}]}],
+        "resources": [
+            {"title": "Spec", "url": "https://e.x/spec"},        # dup of item's
+            {"title": "Other", "url": "https://e.x/other"},
+            {"title": "Other", "url": "https://e.x/other"},      # self-dup
+        ]})
+    urls = [r["url"] for r in out["resources"]]
+    assert urls == ["https://e.x/other"]
+
+
+def test_normalize_dedupes_everyday_by_title():
+    out = extract.normalize_extraction({
+        "everyday_items": [{"title": "Push code"}, {"title": "push CODE"},
+                           {"title": "Review PRs"}]})
+    assert [e["title"] for e in out["everyday_items"]] == ["Push code",
+                                                           "Review PRs"]
