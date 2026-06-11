@@ -62,8 +62,30 @@ def add_event(access_token, summary, day, description="") -> dict:
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"}, json=body, timeout=15)
     if not resp.ok:
-        raise CalendarError(f"Calendar API error ({resp.status_code})")
+        raise CalendarError(_api_error(resp))
     return resp.json()
+
+
+def _api_error(resp) -> str:
+    """Turn a Calendar API error response into a human, actionable message."""
+    reason, message = "", ""
+    try:
+        err = resp.json().get("error", {})
+        message = err.get("message", "")
+        errors = err.get("errors") or [{}]
+        reason = errors[0].get("reason", "")
+    except ValueError:
+        pass
+    if reason == "accessNotConfigured" or "has not been used in project" in message:
+        return ("The Google Calendar API is switched off in this app's Google "
+                "Cloud project. Admin: enable it under APIs & Services → "
+                "Library → Google Calendar API, wait a minute, then retry.")
+    if resp.status_code in (401, 403):
+        return ("Google rejected the calendar request"
+                + (f" — {message}" if message else "")
+                + ". Try disconnecting and granting access again.")
+    return (f"Calendar API error ({resp.status_code})"
+            + (f": {message}" if message else ""))
 
 
 def sync_items(conn, user, client_id, client_secret, items) -> int:

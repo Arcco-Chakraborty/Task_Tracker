@@ -69,3 +69,19 @@ def test_valid_token_no_refresh_raises():
         assert False
     except gcal.CalendarError:
         pass
+
+
+def test_api_disabled_gives_actionable_error(monkeypatch):
+    class Resp:
+        ok = False
+        status_code = 403
+        def json(self):
+            return {"error": {"code": 403,
+                              "message": "Google Calendar API has not been used in project 123 before or it is disabled.",
+                              "errors": [{"reason": "accessNotConfigured"}]}}
+    monkeypatch.setattr(gcal.requests, "post", lambda *a, **k: Resp())
+    try:
+        gcal.add_event("tok", "x", date(2026, 1, 1))
+        assert False, "should raise"
+    except gcal.CalendarError as e:
+        assert "enable it" in str(e).lower() or "switched off" in str(e).lower()
