@@ -48,8 +48,7 @@
         </button>
         {% endif %}
         {% if it.resolved_date %}
-        <a class="link" target="_blank" rel="noopener noreferrer"
-           href="{{ gcal_link((ptitle ~ ': ' ~ it.title) if ptitle else it.title, it.resolved_date, it.description or '') }}">+ Google Calendar</a>
+        <button class="link js-gcal-item" type="button">+ Google Calendar</button>
         {% endif %}
       </div>
       {% if it.resources %}

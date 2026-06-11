@@ -217,7 +217,7 @@ def test_project_page_has_day_grid_and_gcal(tmp_path):
     resp = client.get(f"/project/{pid}")
     assert resp.status_code == 200
     assert b"js-everyday-day" in resp.data           # per-day checkbox grid
-    assert b"calendar.google.com" in resp.data       # per-item prefilled gcal link
+    assert b"js-gcal-project" in resp.data           # direct add-to-Calendar
     assert b"export.ics" in resp.data                # whole-project .ics export
 
 
@@ -345,6 +345,62 @@ def test_basic_scopes_only():
     free of the 'unverified app' warning)."""
     import auth
     assert auth.SCOPES == "openid email profile"
+    # the calendar grant is separate, and uses the narrowest write scope
+    assert auth.CALENDAR_SCOPE.endswith("calendar.events.owned")
+
+
+def test_calendar_incremental_auth_redirect(tmp_path):
+    flask_app, client = _client(tmp_path)
+    r = client.get("/auth/calendar?next=/project/1")
+    assert r.status_code == 302
+    loc = r.headers["Location"]
+    assert "calendar.events.owned" in loc
+    assert "access_type=offline" in loc and "state=" in loc
+    assert "userinfo" not in loc  # only the calendar scope is requested
+
+
+def test_calendar_callback_stores_tokens(tmp_path, monkeypatch):
+    import auth as auth_module
+    flask_app, client = _client(tmp_path)
+    client.get("/auth/calendar?next=/today")  # sets state + flow in session
+    with client.session_transaction() as sess:
+        state = sess["oauth_state"]
+
+    class _Tok:
+        def json(self):
+            return {"access_token": "at", "refresh_token": "rt",
+                    "expires_in": 3600}
+    monkeypatch.setattr(auth_module.requests, "post",
+                        lambda *a, **k: _Tok())
+    r = client.get(f"/auth/callback?code=c&state={state}")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/today")
+    conn = app_module.get_conn(flask_app)
+    user = db.get_user(conn, _uid(flask_app))
+    assert user["google_access_token"] == "at"
+    assert user["google_refresh_token"] == "rt"
+
+
+def test_item_gcal_asks_to_connect_without_grant(tmp_path):
+    flask_app, client = _client(tmp_path)
+    pid = _seed(flask_app)
+    conn = app_module.get_conn(flask_app)
+    ph = db.list_phases(conn, pid)[0]
+    iid = db.list_items(conn, ph["id"])[0]["id"]
+    r = client.post(f"/item/{iid}/gcal")
+    assert r.status_code == 409 and r.get_json()["connect"] is True
+
+
+def test_item_gcal_syncs_with_grant(tmp_path, monkeypatch):
+    flask_app, client = _client(tmp_path)
+    pid = _seed(flask_app)
+    conn = app_module.get_conn(flask_app)
+    db.set_user_google_tokens(conn, _uid(flask_app), access_token="at",
+                              refresh_token="rt", expiry="2099-01-01T00:00:00")
+    ph = db.list_phases(conn, pid)[0]
+    iid = db.list_items(conn, ph["id"])[0]["id"]
+    monkeypatch.setattr(app_module.gcal, "sync_items", lambda *a, **k: 1)
+    r = client.post(f"/item/{iid}/gcal")
+    assert r.status_code == 200 and r.get_json()["added"] == 1
 
 
 def test_oauth_state_in_redirect(tmp_path):

@@ -25,8 +25,7 @@
         <a href="/project/{{ i.project_id }}" class="link">{{ i.project_title }}</a>
         <span class="muted">·</span><span>{{ i.title }}</span>
         {% if i.time_sensitive %}<span class="pill pill-bad">&#9200;</span>{% endif %}
-        {% if i.resolved_date %}<a class="link ml-auto text-xs" target="_blank" rel="noopener noreferrer"
-           href="{{ gcal_link(i.project_title ~ ': ' ~ i.title, i.resolved_date, i.description or '') }}">+ Google Calendar</a>{% endif %}
+        {% if i.resolved_date %}<button class="link ml-auto text-xs js-gcal-item" type="button" data-item-id="{{ i.id }}">+ Google Calendar</button>{% endif %}
       </li>
       {% endfor %}
     </ul>

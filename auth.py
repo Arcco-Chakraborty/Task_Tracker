@@ -7,6 +7,7 @@ scoped workspace; an optional ALLOWED_EMAILS allowlist can restrict access.
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -21,9 +22,12 @@ auth_bp = Blueprint("auth", __name__)
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO = "https://www.googleapis.com/oauth2/v2/userinfo"
-# Identity only — no sensitive scopes, so Google shows no "unverified app"
-# warning. Calendar adds use permissionless prefilled links instead.
+# LOGIN is identity-only — no sensitive scopes, so sign-in never shows a
+# consent warning. The calendar scope is requested separately (incremental
+# auth, /auth/calendar) only when the user first clicks "Add to Calendar".
 SCOPES = "openid email profile"
+# Narrowest write scope: events on calendars the user OWNS (their primary).
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned"
 
 
 def _conn():
@@ -73,6 +77,7 @@ def google_start():
     # `state` ties the callback to this browser session (blocks login CSRF).
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
+    session["oauth_flow"] = "login"
     params = {
         "client_id": current_app.config.get("GOOGLE_CLIENT_ID", ""),
         "redirect_uri": current_app.config.get("GOOGLE_REDIRECT_URI", ""),
@@ -83,22 +88,70 @@ def google_start():
     return redirect(GOOGLE_AUTH + "?" + urlencode(params))
 
 
+@auth_bp.route("/auth/calendar")
+@login_required
+def calendar_start():
+    """Incremental auth: ask for the calendar scope only, when first needed."""
+    state = secrets.token_urlsafe(24)
+    session["oauth_state"] = state
+    session["oauth_flow"] = "calendar"
+    session["oauth_next"] = request.args.get("next") or "/"
+    params = {
+        "client_id": current_app.config.get("GOOGLE_CLIENT_ID", ""),
+        "redirect_uri": current_app.config.get("GOOGLE_REDIRECT_URI", ""),
+        "response_type": "code",
+        "scope": CALENDAR_SCOPE,
+        "state": state,
+        "access_type": "offline",        # we need a refresh token
+        "prompt": "consent",             # ...and Google only sends one here
+        "include_granted_scopes": "true",
+    }
+    return redirect(GOOGLE_AUTH + "?" + urlencode(params))
+
+
+def _exchange_code(code: str) -> dict:
+    return requests.post(GOOGLE_TOKEN, data={
+        "code": code,
+        "client_id": current_app.config.get("GOOGLE_CLIENT_ID", ""),
+        "client_secret": current_app.config.get("GOOGLE_CLIENT_SECRET", ""),
+        "redirect_uri": current_app.config.get("GOOGLE_REDIRECT_URI", ""),
+        "grant_type": "authorization_code",
+    }, timeout=15).json()
+
+
 @auth_bp.route("/auth/callback")
 def google_callback():
     expected_state = session.pop("oauth_state", None)
+    flow = session.pop("oauth_flow", "login")
     if not expected_state or request.args.get("state") != expected_state:
         return redirect(url_for("auth.login", error="Sign-in expired, try again"))
     code = request.args.get("code")
+
+    # --- incremental calendar grant for an already-signed-in user ---
+    if flow == "calendar":
+        next_url = session.pop("oauth_next", "/")
+        uid = session.get("user_id")
+        if uid is None or not code:   # declined or session lost: just go back
+            return redirect(next_url)
+        try:
+            token = _exchange_code(code)
+        except requests.RequestException:
+            return redirect(next_url)
+        if token.get("access_token"):
+            expiry = (datetime.now(timezone.utc) + timedelta(
+                seconds=int(token.get("expires_in", 3600)))).isoformat()
+            db.set_user_google_tokens(
+                _conn(), uid,
+                access_token=token.get("access_token"),
+                refresh_token=token.get("refresh_token"),
+                expiry=expiry)
+        return redirect(next_url)
+
+    # --- normal login ---
     if not code:
         return redirect(url_for("auth.login", error="Authentication failed"))
     try:
-        token = requests.post(GOOGLE_TOKEN, data={
-            "code": code,
-            "client_id": current_app.config.get("GOOGLE_CLIENT_ID", ""),
-            "client_secret": current_app.config.get("GOOGLE_CLIENT_SECRET", ""),
-            "redirect_uri": current_app.config.get("GOOGLE_REDIRECT_URI", ""),
-            "grant_type": "authorization_code",
-        }, timeout=15).json()
+        token = _exchange_code(code)
         access_token = token.get("access_token")
         if not access_token:
             return redirect(url_for("auth.login", error="Could not sign in"))
