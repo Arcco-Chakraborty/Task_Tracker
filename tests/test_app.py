@@ -465,7 +465,8 @@ def test_contact_form_and_rate_limit(tmp_path):
 
 def test_admin_dashboard_access(tmp_path):
     flask_app, client = _client(tmp_path)  # tester is user id 1 -> admin
-    _seed(flask_app)
+    flask_app.config["ADMIN_EMAILS"] = ""  # exercise the id-1 fallback even if
+    _seed(flask_app)                        # the host .env sets ADMIN_EMAILS
     conn = app_module.get_conn(flask_app)
     db.create_contact_message(conn, "Visitor", "v@x.y", "love it", "1.2.3.4")
     r = client.get("/admin")
@@ -481,6 +482,7 @@ def test_admin_dashboard_access(tmp_path):
 
 def test_admin_message_actions(tmp_path):
     flask_app, client = _client(tmp_path)
+    flask_app.config["ADMIN_EMAILS"] = ""  # id-1 fallback, host-env independent
     conn = app_module.get_conn(flask_app)
     mid = db.create_contact_message(conn, "V", "v@x.y", "hi", "ip")
     assert client.post(f"/admin/messages/{mid}/read").status_code == 200
