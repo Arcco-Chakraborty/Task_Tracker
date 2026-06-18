@@ -89,6 +89,34 @@ def test_gemini_requests_json_mime(monkeypatch, tmp_path):
     assert sent["generationConfig"]["responseMimeType"] == "application/json"
 
 
+def test_gemini_sends_thinking_budget_when_set(monkeypatch, tmp_path):
+    cfg = _cfg(tmp_path, monkeypatch)
+    cfg["ai"]["thinking_budget"] = 8192
+    backend = llm.GeminiBackend(cfg)
+    sent = {}
+
+    def fake_post(url, **kw):
+        sent.update(kw["json"])
+        return _Resp(200, _payload('{"ok": true}'))
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    backend.complete("p")
+    # A bounded thinking budget keeps thinking tokens from devouring the
+    # maxOutputTokens budget and truncating the plan JSON (MAX_TOKENS).
+    assert sent["generationConfig"]["thinkingConfig"]["thinkingBudget"] == 8192
+
+
+def test_gemini_omits_thinking_config_when_unset(monkeypatch, tmp_path):
+    backend = llm.GeminiBackend(_cfg(tmp_path, monkeypatch))  # no thinking_budget
+    sent = {}
+
+    def fake_post(url, **kw):
+        sent.update(kw["json"])
+        return _Resp(200, _payload('{"ok": true}'))
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    backend.complete("p")
+    assert "thinkingConfig" not in sent["generationConfig"]
+
+
 def test_gemini_second_sweep_recovers(monkeypatch, tmp_path):
     cfg = _cfg(tmp_path, monkeypatch)
     cfg["ai"]["retry_backoff_seconds"] = 0  # keep the test fast

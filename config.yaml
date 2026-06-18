@@ -9,7 +9,14 @@ ai:
                                  # use gemini-2.5-flash-lite for speed over quality
   endpoint: https://generativelanguage.googleapis.com/v1beta
   temperature: 0.2
-  max_output_tokens: 16384       # big plans produce a lot of JSON
+  max_output_tokens: 32768       # big plans produce a lot of JSON; on 2.5
+                                 # models thinking tokens count against this, so
+                                 # keep it well above thinking_budget + the JSON
+  thinking_budget: 8192          # BOUND thinking. gemini-2.5-flash dynamic
+                                 # thinking could eat the whole output budget and
+                                 # truncate the plan mid-JSON (MAX_TOKENS). 8192
+                                 # is ample for date/sequence reasoning and leaves
+                                 # ~24k tokens for the JSON itself.
   timeout_seconds: 90
   retry_backoff_seconds: 1.5     # pause before the second sweep over the keys
   max_input_chars: 20000         # longer docs are clipped (head + tail kept)
